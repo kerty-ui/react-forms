@@ -19,10 +19,13 @@
     "dist"
   ],
   "scripts": {
-    "dev": "npm run dev:example",
-    "dev:example": "vite --config vite.example.config.ts",
-    "build": "vite build --config vite.lib.config.ts && npm run build:types",
+    "dev": "npm run dev:wiki",
+    "dev:wiki": "vite --config vite.wiki.config.ts",
+    "build": "npm run build:lib && npm run build:wiki",
     "build:types": "tsc -p ./tsconfig.lib.json",
+    "build:lib": "vite build --config vite.lib.config.ts && npm run build:types",
+    "build:wiki": "vite build --config vite.wiki.config.ts",
+    "preview": "vite preview --config vite.wiki.config.ts",
     "prepack": "npm run build:lib && clean-package",
     "postpack": "clean-package restore"
   },
