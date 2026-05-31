@@ -74,7 +74,7 @@ const FormData = <TData,>(props: {
 
 `;
 
-export const KertyFormComponentsExample = () => {
+export const KertyFormCustomComponentsExample = () => {
     const form = useForm<LoginForm>();
     return (
         <ExampleBlock

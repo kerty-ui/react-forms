@@ -5,18 +5,19 @@ import { RenderCount } from "../../../components/render-count.tsx";
 import { FieldMessage } from "../../../components/field-message.tsx";
 import { Message } from "../../../components/message.tsx";
 import type { LoginForm } from "../../../types";
+import type { SubmitEventHandler } from "react";
 
 const codeExample = `
-import { useFormWatch, SingleMessageDrivenValidator,
- ValidationResult, ValidationMessage, Severity } from "@kerty-ui/react-forms";
-import { Message, FieldMessage, RenderCount } form "./components";
+import { useFormWatch, SingleMessageDrivenValidator, ValidationResult,
+    ValidationMessage, Severity } from "@kerty-ui/react-forms";
+import { Message, RenderCount } form "./components";
 
 type LoginForm = {
     username: string;
     password: string;
 };
 
-const BasicKertyValidationExample = () => {
+const KertyBasicValidationExample = () => {
     const [form, data, state, formValidationResult] = useFormWatch<Partial<LoginForm>>({
         validator: () => new SingleMessageDrivenValidator((result, { data }) => {
             if(!data.username) {
@@ -28,27 +29,33 @@ const BasicKertyValidationExample = () => {
         }),
     });
     
+    const handleSubmit =  (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if(form.validate().isValid) {
+            if(data.username === "Chuck" && data.password === "Norris") {
+                form.applyValidationResult(new ValidationResult().set({
+                    text: "Welcome, Chuck Norris!",
+                    severity: Severity.Success,
+                }));
+            }
+            else {
+                form.applyValidationResult(new ValidationResult().set({
+                    text: "Username or password is incorrect",
+                    severity: Severity.Error,
+                }));
+            }
+        }
+    }
+    
     return (
         <article>
-            <form onSubmit={e => {
-                e.stopPropagation();
-                e.preventDefault();
-                if(form.validate().isValid) {
-                    if(data.username === "Chuck" && data.password === "Norris") {
-                        form.applyValidationResult(new ValidationResult().set({
-                            text: "Welcome, Chuck Norris!",
-                            severity: Severity.Success,
-                        }));
-                    }
-                    else {
-                        form.applyValidationResult(new ValidationResult().set({
-                            text: "Username or password is incorrect",
-                            severity: Severity.Error,
-                        }));
-                    }
+            <form onSubmit={handleSubmit}>
+                {
+                    formValidationResult?.messages.map((message, i) => 
+                        <Message key={i} {...message} />
+                    )
                 }
-            }}>
-                {formValidationResult?.messages.map((message, i) => <Message key={i} {...message} />)}
                 <div className="field">
                     <label>Username <RenderCount /></label>
                     <input
@@ -78,14 +85,14 @@ const BasicKertyValidationExample = () => {
                 </div>
             </form>
             <div>
-                <section>
+                <div>
                     <p>Form data <RenderCount /></p>
                     <pre>{JSON.stringify(data, null, 2)}</pre>
-                </section>
-                <section>
+                </div>
+                <div>
                     <p>Form state <RenderCount /></p>
                     <pre>{JSON.stringify(state, null, 2)}</pre>
-                </section>
+                </div>
             </div>
         </article>
     );
@@ -94,7 +101,9 @@ const BasicKertyValidationExample = () => {
 const FieldMessage = (props: {
     message: ValidationMessage,
 }) => {
-    return props.message ? <p data-severity={props.message.severity}>{props.message.text}</p> : null;
+    return props.message 
+        ? <p data-severity={props.message.severity}>{props.message.text}</p> 
+        : null;
 }
 
 `;
@@ -111,31 +120,38 @@ export const KertyValidationExample = () => {
         }),
     });
 
+    const handleSubmit: SubmitEventHandler =  (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if(form.validate().isValid) {
+            if(data.username === "Chuck" && data.password === "Norris") {
+                form.applyValidationResult(new ValidationResult().set({
+                    text: "Welcome, Chuck Norris!",
+                    severity: Severity.Success,
+                }));
+            }
+            else {
+                form.applyValidationResult(new ValidationResult().set({
+                    text: "Username or password is incorrect",
+                    severity: Severity.Error,
+                }));
+            }
+        }
+    }
+
     return (
         <ExampleBlock
-            title="Single-message validation with useFormWatch"
-            description="Uses useFormWatch with SingleMessageDrivenValidator to validate required username/password fields, then on submit applies a form-level success or error message."
+            title="Single message-driven validator"
+            description={
+                <>
+                    <p>This example shows usage of <b>useFormWatch</b> and <b>SingleMessageDrivenValidator</b> to validate form fields.</p>
+                    <p>The hook exposes <b>form</b>, <b>data</b>, <b>state</b>, and <b>formValidationResult</b> — giving you granular control over field values, form state, and validation output.</p>
+                </>
+            }
             code={codeExample}
             codeHighlightedRows={[11, 29, 35, 42, 48, 50, 58, 60, 66]}>
             <form
-                onSubmit={e => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    if(form.validate().isValid) {
-                        if(data.username === "Chuck" && data.password === "Norris") {
-                            form.applyValidationResult(new ValidationResult().set({
-                                text: "Welcome, Chuck Norris!",
-                                severity: Severity.Success,
-                            }));
-                        }
-                        else {
-                            form.applyValidationResult(new ValidationResult().set({
-                                text: "Username or password is incorrect",
-                                severity: Severity.Error,
-                            }));
-                        }
-                    }
-                }}>
+                onSubmit={handleSubmit}>
                 {formValidationResult?.messages.map((message, i) => <Message key={i} {...message} />)}
                 <div className="field">
                     <label>Username <RenderCount /></label>
@@ -169,14 +185,14 @@ export const KertyValidationExample = () => {
                 </div>
             </form>
             <div className="grid grid-cols-2 gap-4 my-4">
-                <section>
+                <div>
                     <p className="flex items-center justify-between">Form data <RenderCount /></p>
                     <pre>{JSON.stringify(data, null, 2)}</pre>
-                </section>
-                <section>
+                </div>
+                <div>
                     <p className="flex items-center justify-between">Form state <RenderCount /></p>
                     <pre>{JSON.stringify(state, null, 2)}</pre>
-                </section>
+                </div>
             </div>
         </ExampleBlock>
     );

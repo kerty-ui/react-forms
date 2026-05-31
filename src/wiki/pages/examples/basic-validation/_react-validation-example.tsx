@@ -6,7 +6,7 @@ import { Message } from "../../../components/message.tsx";
 import { Severity, type ValidationMessage } from "@kerty-ui/react-forms";
 import type { LoginForm } from "../../../types";
 
-const basicUseStateFormCodeExample = `
+const codeExample = `
 
 import { useState } from "react";
 import { Message, RenderCount } form "./components";
@@ -18,8 +18,8 @@ type LoginForm = {
 
 const ReactValidationExample = () => {
     const [data, setData] = useState<Partial<LoginForm>>({});
-    const [formValidationMessage, setFormValidationMessage] = useState<ValidationMessage | null>(null);
-    const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
+    const [formValidationMessage, setFormValidationMessage] = useState(null);
+    const [isSubmitted, setIsSubmitted] = useState(false);
 
     const errors = {
         username: !data.username ? "Username is required" : undefined,
@@ -28,12 +28,12 @@ const ReactValidationExample = () => {
 
     const isValid = !errors.username && !errors.password;
 
-    const updateField = (field: keyof LoginForm, value: string) => {
-        setData(prev => ({ ...prev, [field]: value }));
+    const updateField = (field, value) => {
+        setData(prevState => ({ ...prevState, [field]: value }));
         setFormValidationMessage(null);
     };
 
-    const handleSubmit:SubmitEventHandler = (e) => {
+    const handleSubmit = (e) => {
         e.stopPropagation();
         e.preventDefault();
         setIsSubmitted(true);
@@ -70,10 +70,10 @@ const ReactValidationExample = () => {
                     <label>Username <RenderCount /></label>
                     <input
                         placeholder="Enter your username"
-                        value={state.username ?? ""}
+                        value={data.username ?? ""}
                         onChange={e => updateField("username", e.target.value)}
                     />
-                    {isValidated && usernameError && <p>{usernameError}</p>}
+                    {isSubmitted && errors.username && <p>{errors.username}</p>}
                 </div>
                 <div className="field">
                     <label>Password <RenderCount /></label>
@@ -83,7 +83,7 @@ const ReactValidationExample = () => {
                         value={data.password ?? ""}
                         onChange={e => updateField("password", e.target.value)}
                     />
-                    {isValidated && passwordError && <p>{passwordError}</p>}
+                    {isSubmitted && errors.password && <p>{errors.password}</p>}
                 </div>
                 <div>
                     <button type="submit">
@@ -95,14 +95,14 @@ const ReactValidationExample = () => {
                 </div>
             </form>
             <div>
-                <section>
+                <div>
                     <p>Form data <RenderCount /></p>
                     <pre>{JSON.stringify(data, null, 2)}</pre>
-                </section>
-                <section>
+                </div>
+                <div>
                     <p>Form state <RenderCount /></p>
-                    <pre>{JSON.stringify({ isValid, isValidated }, null, 2)}</pre>
-                </section>
+                    <pre>{JSON.stringify({ isValid, isSubmitted }, null, 2)}</pre>
+                </div>
             </div>
         </article>
     )
@@ -123,7 +123,7 @@ export const ReactValidationExample = () => {
     const isValid = !errors.username && !errors.password;
 
     const updateField = (field: keyof LoginForm, value: string) => {
-        setData(prev => ({ ...prev, [field]: value }));
+        setData(prevState => ({ ...prevState, [field]: value }));
         setFormValidationMessage(null);
     };
 
@@ -158,9 +158,9 @@ export const ReactValidationExample = () => {
 
     return (
         <ExampleBlock
-            title="Manual validation with useState"
+            title="React manual validation with useState"
             description="Uses plain React state to validate required username/password on render, show field errors after submit, and display a form-level success/error message."
-            code={basicUseStateFormCodeExample}>
+            code={codeExample}>
             <form onSubmit={handleSubmit}>
                 {formValidationMessage && <Message {...formValidationMessage} />}
                 <div className="field">

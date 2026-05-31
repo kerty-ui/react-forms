@@ -198,6 +198,11 @@
     .field [data-severity="8"] {
         @apply mb-[0.2rem] text-sm text-red-500 pt-1 pl-1;
     }
+    
+    .field:has([data-severity="8"]) input,
+    .field:has([data-severity="8"]) select {
+        @apply border-red-500 focus:ring-red-500;
+    }
 
     .page-block p {
         @apply leading-relaxed mb-1;

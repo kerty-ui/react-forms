@@ -10,9 +10,10 @@ export const ExampleBlock = (props: {
     description: ReactNode;
     code?: string;
     codeHighlightedRows?: number[];
+    preview?: boolean;
     children: ReactNode;
 }) => {
-    const [state, setState] = useState<"preview" | "code">("code");
+    const [state, setState] = useState<"preview" | "code">(props.preview ? "preview" : "code");
     return (
         <article className="row-span-4 grid grid-rows-subgrid min-w-0 mt-4">
             <header className="flex items-center justify-between gap-2">

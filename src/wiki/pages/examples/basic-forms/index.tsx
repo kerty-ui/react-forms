@@ -4,7 +4,7 @@ import { PageBlock } from "../../../components/page-block.tsx";
 import { ReactFormExample } from "./_react-form-example.tsx";
 import { KertyUseFormWatchExample } from "./_kerty-use-form-watch-example.tsx";
 import { KertyFormFieldExample } from "./_kerty-form-field-example.tsx";
-import { KertyFormComponentsExample } from "./_kerty-form-components-example.tsx";
+import { KertyFormCustomComponentsExample } from "./_kerty-form-custom-components-example.tsx";
 
 export function Component() {
     return (
@@ -22,7 +22,7 @@ export function Component() {
                 <ReactFormExample />
                 <KertyUseFormWatchExample />
                 <KertyFormFieldExample />
-                <KertyFormComponentsExample />
+                <KertyFormCustomComponentsExample />
             </ExampleBlockContainer>
         </article>
     );

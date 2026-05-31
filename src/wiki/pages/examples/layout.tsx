@@ -3,8 +3,9 @@ import { NavLink, Outlet, Link } from "react-router";
 
 const navItems = [
     { to: "basic-forms", label: "Basic forms" },
-    { to: "basic-forms-validation", label: "Basic forms - validation" },
     { to: "complex-forms", label: "Complex forms" },
+    { to: "grid-forms", label: "Grid forms" },
+    { to: "basic-validation", label: "Basic validation" },
 ];
 
 const LoadingFallback = () => (
