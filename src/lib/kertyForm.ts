@@ -153,10 +153,13 @@ export class KertyForm<TData> implements IKertyForm<TData> {
                 this.#dirtyFields.delete(name as string);
 
                 const formIsValid = this.#isFormValid();
-                if(this.#state.isValid !== formIsValid) {
+                const formIsDirty = this.#dirtyFields.size > 0;
+
+                if(this.#state.isValid !== formIsValid || this.#state.isDirty !== formIsDirty) {
                     this.#state = {
                         ...this.#state,
                         isValid: formIsValid,
+                        isDirty: formIsDirty,
                     };
                     for(const listener of this.#listeners) {
                         if(listener.listenStateChange) {

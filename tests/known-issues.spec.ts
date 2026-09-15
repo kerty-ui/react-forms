@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { KertyForm } from "../src/lib/kertyForm";
-import { isEqual } from "../src/lib/utils/isEqual";
 import { ValidatorBuilder } from "../src/lib/validation/validatorBuilder";
 import { MultiMessageResults } from "../src/lib/validation/multiMessageResults";
 import { Validations } from "../src/lib/validation/validations";
@@ -67,38 +66,7 @@ describe("MultiMessageResults.addFormMessage", () => {
     });
 });
 
-// ─── 3. isEqual and repeated object references ───────────────────────────────
-
-describe("isEqual – repeated references", () => {
-    it.fails("should report the values as equal when one side reuses the same reference twice", () => {
-        // The `visited` WeakSet exists for cycle detection but is consulted for *any*
-        // repeated reference: on the second visit it returns
-        // `visited.has(a) && visited.has(b)`, which is false whenever only one side
-        // reuses the reference. Effect: a false "dirty" on shared lookup objects.
-        const shared = { id: 1 };
-
-        expect(isEqual({ from: shared, to: shared }, { from: { id: 1 }, to: { id: 1 } })).toBe(true);
-    });
-});
-
-// ─── 4. form dirty flag survives the last dirty field unmounting ─────────────
-
-describe("KertyForm – unsubscribing a dirty field", () => {
-    it.fails("should recompute the form dirty flag when the last dirty field unsubscribes", () => {
-        // The unsubscribe path drops the field from `#dirtyFields` and recomputes
-        // `isValid`, but never recomputes `isDirty`. The form then reports itself dirty
-        // with an empty dirty-field set until the next change happens to recompute it.
-        const form = new KertyForm<any>({ data: { a: 1 } });
-        const unsubscribe = form.addFieldListener("a", () => { });
-        form.setFieldValue("a", 2);
-
-        unsubscribe();
-
-        expect(form.getState().isDirty).toBe(false);
-    });
-});
-
-// ─── 5. touch() on an unregistered field is a silent no-op ───────────────────
+// ─── 3. touch() on an unregistered field is a silent no-op ───────────────────
 
 describe("KertyForm.touch", () => {
     it.fails("should mark the form touched when called for a field that has no listener", () => {
@@ -113,7 +81,7 @@ describe("KertyForm.touch", () => {
     });
 });
 
-// ─── 6. reading a validation result registers the field as a side effect ─────
+// ─── 4. reading a validation result registers the field as a side effect ─────
 
 describe("KertyForm.getFieldValidationResult", () => {
     it.fails("should not register the field when only its validation result is read", () => {

@@ -1,15 +1,29 @@
-﻿export const isEqual = (valueA: any, valueB: any, treatEmptyStringAsNull?: boolean, visited?: WeakSet<any>): boolean => {
+﻿type ComparedPairs = WeakMap<object, WeakSet<object>>;
+
+const isPairCompared = (compared: ComparedPairs, a: object, b: object): boolean =>
+    compared.get(a)?.has(b) === true;
+
+const markPairCompared = (compared: ComparedPairs, a: object, b: object): void => {
+    const partners = compared.get(a);
+    if (partners == null) {
+        compared.set(a, new WeakSet([b]));
+        return;
+    }
+    partners.add(b);
+};
+
+export const isEqual = (valueA: any, valueB: any, treatEmptyStringAsNull?: boolean, compared?: ComparedPairs): boolean => {
     if (treatEmptyStringAsNull) {
         return _isEqualNormalized(
             valueA === "" ? null : valueA,
             valueB === "" ? null : valueB,
-            visited
+            compared
         );
     }
-    return _isEqual(valueA, valueB, visited);
+    return _isEqual(valueA, valueB, compared);
 };
 
-const _isEqualNormalized = (a: any, b: any, visited: WeakSet<any> | undefined): boolean => {
+const _isEqualNormalized = (a: any, b: any, compared: ComparedPairs | undefined): boolean => {
     if (a === b) {
         return true;
     }
@@ -31,13 +45,12 @@ const _isEqualNormalized = (a: any, b: any, visited: WeakSet<any> | undefined): 
         return b instanceof Date && a.getTime() === b.getTime();
     }
 
-    if (!visited) {
-        visited = new WeakSet();
-    } else if (visited.has(a) || visited.has(b)) {
-        return visited.has(a) && visited.has(b);
+    if (!compared) {
+        compared = new WeakMap();
+    } else if (isPairCompared(compared, a, b)) {
+        return true;
     }
-    visited.add(a);
-    visited.add(b);
+    markPairCompared(compared, a, b);
 
     if (Array.isArray(a)) {
         if (!Array.isArray(b) || a.length !== b.length) return false;
@@ -45,7 +58,7 @@ const _isEqualNormalized = (a: any, b: any, visited: WeakSet<any> | undefined): 
             const ai = a[i] === "" ? null : a[i];
             const bi = b[i] === "" ? null : b[i];
             if (ai === bi) continue;
-            if (!_isEqualNormalized(ai, bi, visited)) return false;
+            if (!_isEqualNormalized(ai, bi, compared)) return false;
         }
         return true;
     }
@@ -71,7 +84,7 @@ const _isEqualNormalized = (a: any, b: any, visited: WeakSet<any> | undefined): 
         if (va === vb) {
             continue;
         }
-        if (!_isEqualNormalized(va, vb, visited)) {
+        if (!_isEqualNormalized(va, vb, compared)) {
             return false;
         }
     }
@@ -79,7 +92,7 @@ const _isEqualNormalized = (a: any, b: any, visited: WeakSet<any> | undefined): 
     return true;
 };
 
-const _isEqual = (a: any, b: any, visited: WeakSet<any> | undefined): boolean => {
+const _isEqual = (a: any, b: any, compared: ComparedPairs | undefined): boolean => {
     if (a === b) {
         return true;
     }
@@ -101,13 +114,12 @@ const _isEqual = (a: any, b: any, visited: WeakSet<any> | undefined): boolean =>
         return b instanceof Date && a.getTime() === b.getTime();
     }
 
-    if (!visited) {
-        visited = new WeakSet();
-    } else if (visited.has(a) || visited.has(b)) {
-        return visited.has(a) && visited.has(b);
+    if (!compared) {
+        compared = new WeakMap();
+    } else if (isPairCompared(compared, a, b)) {
+        return true;
     }
-    visited.add(a);
-    visited.add(b);
+    markPairCompared(compared, a, b);
 
     if (Array.isArray(a)) {
         if (!Array.isArray(b) || a.length !== b.length) {
@@ -120,7 +132,7 @@ const _isEqual = (a: any, b: any, visited: WeakSet<any> | undefined): boolean =>
             if (ai === bi) {
                 continue;
             }
-            if (!_isEqual(ai, bi, visited)) {
+            if (!_isEqual(ai, bi, compared)) {
                 return false;
             }
         }
@@ -149,7 +161,7 @@ const _isEqual = (a: any, b: any, visited: WeakSet<any> | undefined): boolean =>
         if (va === vb) {
             continue;
         }
-        if (!_isEqual(va, vb, visited)) {
+        if (!_isEqual(va, vb, compared)) {
             return false;
         }
     }

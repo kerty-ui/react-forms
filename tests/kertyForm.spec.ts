@@ -292,6 +292,86 @@ describe("KertyForm – dirty tracking", () => {
 
         expect(form.getState().isDirty).toBe(false);
     });
+
+    it("should not report the field dirty when the initial data reuses one object twice", () => {
+        const lookup = { id: 1, label: "EUR" };
+        const form = new KertyForm<any>({ data: { from: lookup, to: lookup } });
+        register(form, "from");
+
+        form.setFieldValue("from", { id: 1, label: "EUR" });
+
+        expect(form.getState().isDirty).toBe(false);
+    });
+});
+
+// ─── dirty tracking across unmount ───────────────────────────────────────────
+
+describe("KertyForm – dirty tracking when a field unsubscribes", () => {
+    it("should clear the form dirty flag when the last dirty field unsubscribes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const unsubscribe = register(form, "a");
+        form.setFieldValue("a", 2);
+
+        unsubscribe();
+
+        expect(form.getState().isDirty).toBe(false);
+    });
+
+    it("should keep the form dirty when another dirty field is still subscribed", () => {
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
+        const unsubscribe = register(form, "a");
+        register(form, "b");
+        form.setFieldValue("a", 2);
+        form.setFieldValue("b", 2);
+
+        unsubscribe();
+
+        expect(form.getState().isDirty).toBe(true);
+    });
+
+    it("should notify state listeners when the dirty flag changes on unsubscribe", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const unsubscribe = register(form, "a");
+        form.setFieldValue("a", 2);
+        let calls = 0;
+        form.addListener(() => calls++, {
+            listenDataChange: false,
+            listenStateChange: true,
+            listenValidationChange: false,
+            listenFieldValidationChange: false,
+        });
+
+        unsubscribe();
+
+        expect(calls).toBe(1);
+    });
+
+    it("should not notify state listeners when a clean field unsubscribes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const unsubscribe = register(form, "a");
+        let calls = 0;
+        form.addListener(() => calls++, {
+            listenDataChange: false,
+            listenStateChange: true,
+            listenValidationChange: false,
+            listenFieldValidationChange: false,
+        });
+
+        unsubscribe();
+
+        expect(calls).toBe(0);
+    });
+
+    it("should keep the form dirty when one of two listeners on a dirty field unsubscribes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        register(form, "a");
+        const unsubscribe = register(form, "a");
+        form.setFieldValue("a", 2);
+
+        unsubscribe();
+
+        expect(form.getState().isDirty).toBe(true);
+    });
 });
 
 // ─── touch ───────────────────────────────────────────────────────────────────

@@ -403,6 +403,62 @@ describe("isEqual", () => {
             expect(isEqual(obj1, obj2)).toBe(false);
         });
 
+        it("should treat a shared reference as equal when only one side reuses it", () => {
+            const shared = { x: 1 };
+
+            expect(isEqual({ p: shared, q: shared }, { p: { x: 1 }, q: { x: 1 } })).toBe(true);
+        });
+
+        it("should still compare the second occurrence when only one side reuses a reference", () => {
+            const shared = { x: 1 };
+
+            expect(isEqual({ p: shared, q: shared }, { p: { x: 1 }, q: { x: 2 } })).toBe(false);
+        });
+
+        it("should treat a shared reference in an array as equal when only one side reuses it", () => {
+            const shared = { x: 1 };
+
+            expect(isEqual([shared, shared], [{ x: 1 }, { x: 1 }])).toBe(true);
+        });
+
+        it("should detect a difference in an array when only one side reuses a reference", () => {
+            const shared = { x: 1 };
+
+            expect(isEqual([shared, shared], [{ x: 1 }, { x: 9 }])).toBe(false);
+        });
+
+        it("should treat a shared reference as equal when both sides reuse their own", () => {
+            const left = { x: 1 };
+            const right = { x: 1 };
+
+            expect(isEqual({ p: left, q: left }, { p: right, q: right })).toBe(true);
+        });
+
+        it("should treat a shared reference as equal when a nested branch reuses an outer one", () => {
+            const shared = { x: 1 };
+
+            expect(isEqual(
+                { p: shared, nested: { q: shared } },
+                { p: { x: 1 }, nested: { q: { x: 1 } } },
+            )).toBe(true);
+        });
+
+        it("should handle a self reference when empty strings are normalized", () => {
+            const obj1: any = { a: "" };
+            obj1.self = obj1;
+
+            const obj2: any = { a: null };
+            obj2.self = obj2;
+
+            expect(isEqual(obj1, obj2, true)).toBe(true);
+        });
+
+        it("should treat a shared reference as equal when empty strings are normalized", () => {
+            const shared = { x: 1 };
+
+            expect(isEqual({ p: shared, q: shared }, { p: { x: 1 }, q: { x: 1 } }, true)).toBe(true);
+        });
+
         it("should handle mutually circular references", () => {
             const obj1: any = { a: 1 };
             const obj1b: any = { b: 2 };
