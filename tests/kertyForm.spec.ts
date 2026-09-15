@@ -403,12 +403,55 @@ describe("KertyForm.touch", () => {
         expect(form.getState().isTouched).toBe(true);
     });
 
-    it("should leave the field untouched when called for a field that is not registered", () => {
+    it("should mark the field touched when called for a field that has no listener", () => {
         const form = new KertyForm<LoginForm>({});
 
         form.touch("username");
 
+        expect(form.getFieldState("username").isTouched).toBe(true);
+    });
+
+    it("should mark the form touched when called for a field that has no listener", () => {
+        const form = new KertyForm<LoginForm>({});
+
+        form.touch("username");
+
+        expect(form.getState().isTouched).toBe(true);
+    });
+
+    it("should keep the field touched when a listener subscribes after the touch", () => {
+        const form = new KertyForm<LoginForm>({});
+        form.touch("username");
+
+        const snapshot = form.getFieldSnapshot("username");
+
+        expect(snapshot().isTouched).toBe(true);
+    });
+
+    it("should leave other fields untouched when one field is touched", () => {
+        const form = new KertyForm<LoginForm>({});
+
+        form.touch("username");
+
+        expect(form.getFieldState("password").isTouched).toBe(false);
+    });
+
+    it("should touch no individual field when called without a field name", () => {
+        const form = new KertyForm<LoginForm>({});
+        register(form, "username");
+
+        form.touch();
+
         expect(form.getFieldState("username").isTouched).toBe(false);
+    });
+
+    it("should clear the touched state when the form is reset", () => {
+        const form = new KertyForm<LoginForm>({});
+        form.touch("username");
+
+        form.reset();
+
+        expect([form.getState().isTouched, form.getFieldState("username").isTouched]).toEqual([false, false]);
     });
 });
 

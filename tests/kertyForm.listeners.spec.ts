@@ -211,6 +211,37 @@ describe("KertyForm.addFieldListener", () => {
         expect(remaining.calls).toBe(1);
     });
 
+    it("should notify the listener when its field is touched", () => {
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
+        const [count, listener] = counter();
+        form.addFieldListener("a", listener);
+
+        form.touch("a");
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify the listener when a different field is touched", () => {
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
+        const [count, listener] = counter();
+        form.addFieldListener("a", listener);
+
+        form.touch("b");
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should not notify the listener when its field is touched a second time", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        form.touch("a");
+        const [count, listener] = counter();
+        form.addFieldListener("a", listener);
+
+        form.touch("a");
+
+        expect(count.calls).toBe(0);
+    });
+
     it("should notify the listener when its field validation result changes", () => {
         const form = new KertyForm<any>({ data: { a: 1 } });
         const [count, listener] = counter();

@@ -287,17 +287,14 @@ export class KertyForm<TData> implements IKertyForm<TData> {
         } as NotifyListenerOptions;
 
         if(name != null) {
-
-            let field = this.#fields.get(name);
-            if(field == null || field.state.isTouched) {
-                return;
+            const field = this.#getField(name as string);
+            if(!field.state.isTouched) {
+                field.state = {
+                    ...field.state,
+                    isTouched: true,
+                }
+                listenerOptions.affectedFields.add(name as string);
             }
-
-            field.state = {
-                ...field.state,
-                isTouched: true,
-            }
-            listenerOptions.affectedFields.add(name);
         }
 
         if(!this.#state.isTouched) {
