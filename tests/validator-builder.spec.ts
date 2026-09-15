@@ -261,6 +261,82 @@ describe("ValidatorBuilder – array paths", () => {
         expect([...result.keys()]).toEqual(["matrix[0][1]"]);
     });
 
+    it("should keep both rules when the item rule is registered before the item field rule", () => {
+        const validator = new ValidatorBuilder<ArrayModel>()
+            .setup((b) => {
+                b.validationFor("items[]").add({ check: (ctx) => ctx.value == null, message: "Item is required" });
+                b.validationFor("items[].brand").add({ check: isTextEmpty, message: "Brand is required" });
+            })
+            .build();
+
+        const result = validator.validate({ data: { tags: [], items: [{ brand: "", mark: "m" }] } });
+
+        expect(firstTextFor(result, "items[0].brand")).toBe("Brand is required");
+    });
+
+    it("should keep both rules when the item field rule is registered before the item rule", () => {
+        const validator = new ValidatorBuilder<ArrayModel>()
+            .setup((b) => {
+                b.validationFor("items[].brand").add({ check: isTextEmpty, message: "Brand is required" });
+                b.validationFor("items[]").add({ check: (ctx) => ctx.value == null, message: "Item is required" });
+            })
+            .build();
+
+        const result = validator.validate({ data: { tags: [], items: [{ brand: "", mark: "m" }] } });
+
+        expect(firstTextFor(result, "items[0].brand")).toBe("Brand is required");
+    });
+
+    it("should still apply the item rule when it was registered before the item field rule", () => {
+        const validator = new ValidatorBuilder<ArrayModel>()
+            .setup((b) => {
+                b.validationFor("items[]").add({ check: (ctx) => ctx.value == null, message: "Item is required" });
+                b.validationFor("items[].brand").add({ check: isTextEmpty, message: "Brand is required" });
+            })
+            .build();
+
+        const result = validator.validate({ data: { tags: [], items: [null as any] } });
+
+        expect(firstTextFor(result, "items[0]")).toBe("Item is required");
+    });
+
+    it("should register every rule when item and item field rules are interleaved", () => {
+        const validator = new ValidatorBuilder<ArrayModel>()
+            .setup((b) => {
+                b.validationFor("items[].brand").add({ check: isTextEmpty, message: "Brand is required" });
+                b.validationFor("items[]").add({ check: (ctx) => ctx.value == null, message: "Item is required" });
+                b.validationFor("items[].mark").add({ check: isTextEmpty, message: "Mark is required" });
+            })
+            .build();
+
+        const result = validator.validate({ data: { tags: [], items: [{ brand: "", mark: "" }] } });
+
+        expect([...result.keys()].sort()).toEqual(["items[0].brand", "items[0].mark"]);
+    });
+
+    it("should keep the rule on the array itself alongside a rule on its item fields", () => {
+        const validator = new ValidatorBuilder<ArrayModel>()
+            .setup((b) => {
+                b.validationFor("items").add({ check: (ctx) => Validations.IsArrayEmpty(ctx.value), message: "At least one item is required" });
+                b.validationFor("items[].brand").add({ check: isTextEmpty, message: "Brand is required" });
+            })
+            .build();
+
+        const result = validator.validate({ data: { tags: [], items: [] } });
+
+        expect(firstTextFor(result, "items")).toBe("At least one item is required");
+    });
+
+    it("should report the failure under the indexed path when the item is an object inside a nested array", () => {
+        const validator = new ValidatorBuilder<{ matrix: { x: string }[][] }>()
+            .setup((b) => b.validationFor("matrix[][].x").add({ check: isTextEmpty, message: "X is required" }))
+            .build();
+
+        const result = validator.validate({ data: { matrix: [[{ x: "" }]] } });
+
+        expect([...result.keys()]).toEqual(["matrix[0][0].x"]);
+    });
+
     it("should report the failure under the full path when the array is nested inside an object", () => {
         const validator = new ValidatorBuilder<DeepModel>()
             .setup((b) => b.validationFor("nested.items[].label").add({ check: isTextEmpty, message: "Label is required" }))
@@ -407,5 +483,21 @@ describe("ValidatorBuilder – scoped to a changed field", () => {
         const result = validator.validate({ data: { tags: ["", "b"], items: [] }, fieldName: "tags[1]" });
 
         expect([...result.keys()]).toEqual(["tags[0]", "tags[1]"]);
+    });
+
+    it("should revalidate the item field when the item rule was registered first", () => {
+        const validator = new ValidatorBuilder<ArrayModel>()
+            .setup((b) => {
+                b.validationFor("items[]").add({ check: (ctx) => ctx.value == null, message: "Item is required" });
+                b.validationFor("items[].brand").add({ check: isTextEmpty, message: "Brand is required" });
+            })
+            .build();
+
+        const result = validator.validate({
+            data: { tags: [], items: [{ brand: "", mark: "m" }] },
+            fieldName: "items[0].brand",
+        });
+
+        expect(firstTextFor(result, "items[0].brand")).toBe("Brand is required");
     });
 });

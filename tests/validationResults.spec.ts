@@ -183,6 +183,65 @@ describe("MultiMessageResults", () => {
         expect(results.isValid).toBe(true);
     });
 
+    it("should store the message once when addFormMessage is called", () => {
+        const results = new MultiMessageResults<any>().addFormMessage("Form failed");
+
+        expect(texts(results.get(""))).toEqual(["Form failed"]);
+    });
+
+    it("should keep every message when addFormMessage is called twice", () => {
+        const results = new MultiMessageResults<any>()
+            .addFormMessage("First")
+            .addFormMessage("Second");
+
+        expect(texts(results.get(""))).toEqual(["First", "Second"]);
+    });
+
+    it("should stay valid when only non-error form messages are added", () => {
+        const results = new MultiMessageResults<any>().addFormMessage("Heads up", Severity.Warning);
+
+        expect(results.isValid).toBe(true);
+    });
+
+    it("should carry the severity through when a non-error form message is added", () => {
+        const results = new MultiMessageResults<any>().addFormMessage("Heads up", Severity.Warning);
+
+        expect(results.get("")?.has(Severity.Error)).toBe(false);
+    });
+
+    it("should become invalid when an error joins earlier non-error form messages", () => {
+        const results = new MultiMessageResults<any>()
+            .addFormMessage("Heads up", Severity.Warning)
+            .addFormMessage("Form failed");
+
+        expect(results.isValid).toBe(false);
+    });
+
+    it("should keep form and field messages apart when both are added", () => {
+        const results = new MultiMessageResults<any>()
+            .addFormMessage("Form first")
+            .addFieldMessage("name", "Field first")
+            .addFormMessage("Form second")
+            .addFieldMessage("name", "Field second");
+
+        expect([texts(results.get("")), texts(results.get("name"))]).toEqual([
+            ["Form first", "Form second"],
+            ["Field first", "Field second"],
+        ]);
+    });
+
+    it("should return itself when addFormMessage is called so calls can be chained", () => {
+        const results = new MultiMessageResults<any>();
+
+        expect(results.addFormMessage("Form failed")).toBe(results);
+    });
+
+    it("should return itself when addFieldMessage is called so calls can be chained", () => {
+        const results = new MultiMessageResults<any>();
+
+        expect(results.addFieldMessage("name", "Required")).toBe(results);
+    });
+
     it("should keep every message when addFieldMessage is called twice for one field", () => {
         const results = new MultiMessageResults<any>()
             .addFieldMessage("name", "First")

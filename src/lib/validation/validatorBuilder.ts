@@ -66,6 +66,32 @@ interface IValidatorBuilder<TData> {
     build: () => IValidator<TData>
 }
 
+const getPropertySchema = (schema: any, part: FieldPathPart) => {
+    let child = schema[part.name];
+    if (child == null) {
+        child = schema[part.name] = part.isArray ? [] : {};
+    }
+    return child;
+};
+
+const getArrayItemSchema = (schema: any[], part: FieldPathPart) => {
+    const itemIsArray = part.isArray === true;
+
+    for (let i = 0; i < schema.length; i++) {
+        const entry = schema[i];
+        if (entry instanceof FieldValidations) {
+            continue;
+        }
+        if (Array.isArray(entry) === itemIsArray) {
+            return entry;
+        }
+    }
+
+    const child = itemIsArray ? [] : {};
+    schema.push(child);
+    return child;
+};
+
 export class ValidationBuilder<TData, TValue> implements IValidationBuilder<TData, TValue> {
 
     validations: IValidation<TData, TValue>[] = [];
@@ -125,34 +151,21 @@ export class ValidatorBuilder<TData> implements IValidatorBuilder<TData> {
         }
 
         let current = data;
-        let prevPart = {} as FieldPathPart;
-        for (let i = 0; i < path.length - 1; i++) {
-            prevPart = path[i];
-            let partValue = current[prevPart.name];
-            if(partValue == null) {
-                partValue = current[prevPart.name] = prevPart.isArray ? [] : {};
-            }
-            else if (partValue instanceof FieldValidations) {
-                continue;
-            }
-            current = partValue;
+        const lastIndex = path.length - 1;
+
+        for (let i = 0; i < lastIndex; i++) {
+            current = Array.isArray(current)
+                ? getArrayItemSchema(current, path[i])
+                : getPropertySchema(current, path[i]);
         }
 
-        const part = path[path.length - 1];
+        const lastPart = path[lastIndex];
 
         if(Array.isArray(current)) {
-            if(current.length === 0) {
-                current[0] = value;
-            }
-            else if(prevPart.isArray && prevPart.isArrayItem) {
-                current.push([value]);
-            }
-            else {
-                current.push(value);
-            }
+            current.push(value);
         }
         else {
-            current['_' + part.name] = value;
+            current['_' + lastPart.name] = value;
         }
     }
 }

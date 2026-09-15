@@ -9,36 +9,22 @@ export class MultiMessageResults<TData> extends Map<string, IValidationResult> {
         text: string,
         severity: MessageSeverity = Severity.Error,
     ) {
-        if(severity === Severity.Error) {
-            this.isValid = false;
-        }
-
-        this.set("", new ValidationResult().add({
-            text: text,
-            severity: severity,
-        }));
-
-
-        let validationResult = this.get("") as ValidationResult;
-        if(validationResult == null) {
-            validationResult = new ValidationResult();
-            this.set("", validationResult);
-        }
-
-        validationResult.add({ text: text, severity: severity });
-
-        return this;
+        return this.#addMessage("", text, severity);
     }
 
     addFieldMessage(name: FieldPath<TData>, text: string, severity: MessageSeverity = Severity.Error) {
+        return this.#addMessage(name, text, severity);
+    }
+
+    #addMessage(key: string, text: string, severity: MessageSeverity) {
         if(severity === Severity.Error) {
             this.isValid = false;
         }
 
-        let validationResult = this.get(name) as ValidationResult;
+        let validationResult = this.get(key) as ValidationResult;
         if(validationResult == null) {
             validationResult = new ValidationResult();
-            this.set(name, validationResult);
+            this.set(key, validationResult);
         }
 
         validationResult.add({ text: text, severity: severity });
