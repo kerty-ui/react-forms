@@ -4,3 +4,4 @@ dist
 dist-wiki
 *.tgz
 coverage
+tests/benchmarks/*results.json
