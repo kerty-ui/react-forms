@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { KertyForm } from "../src/lib/kertyForm";
 import { isEqual } from "../src/lib/utils/isEqual";
-import { FieldValidations, Validator } from "../src/lib/validation/validator";
 import { ValidatorBuilder } from "../src/lib/validation/validatorBuilder";
 import { MultiMessageResults } from "../src/lib/validation/multiMessageResults";
 import { Validations } from "../src/lib/validation/validations";
@@ -24,43 +23,7 @@ const textsFor = (result: Map<string, IValidationResult>, field: string) =>
 
 const isTextEmpty = (ctx: any) => Validations.IsTextEmpty(ctx.value);
 
-// ─── 1. a field that passed full validation is never revalidated on change ───
-
-describe("KertyForm – fieldDriven revalidation after a passing validate", () => {
-    const requiredName = () => new Validator<any>({
-        _name: new FieldValidations({ check: isTextEmpty, message: "Name is required" }),
-    });
-
-    it.fails("should flag the field when it is cleared after having passed full validation", () => {
-        // During full validation `Validator` only returns entries for fields that
-        // produced messages, so a *passing* field is left `isValidated: false`. The
-        // on-change guard in `#onFieldChange` requires `isValidated`, so the field is
-        // never re-checked: emptying a required field after a successful submit leaves
-        // no message and the form reports itself valid.
-        // Note the asymmetry — a messageDriven validator re-runs on any change once the
-        // form is validated, so it handles this case correctly (asserted as normal
-        // behaviour in kertyForm.validation.spec.ts).
-        const form = new KertyForm<any>({ data: { name: "John" }, validator: requiredName() });
-        form.addFieldListener("name", () => { });
-        form.validate();
-
-        form.setFieldValue("name", "");
-
-        expect(form.getFieldValidationMessage("name")?.text).toBe("Name is required");
-    });
-
-    it.fails("should keep the form invalid when a passing field is cleared after full validation", () => {
-        const form = new KertyForm<any>({ data: { name: "John" }, validator: requiredName() });
-        form.addFieldListener("name", () => { });
-        form.validate();
-
-        form.setFieldValue("name", "");
-
-        expect(form.getState().isValid).toBe(false);
-    });
-});
-
-// ─── 2. ValidatorBuilder path registration is order dependent ────────────────
+// ─── 1. ValidatorBuilder path registration is order dependent ────────────────
 
 describe("ValidatorBuilder – mixing item and item-field rules", () => {
     it.fails("should keep the item field rule when the item rule was registered first", () => {
@@ -81,7 +44,7 @@ describe("ValidatorBuilder – mixing item and item-field rules", () => {
     });
 });
 
-// ─── 3. MultiMessageResults.addFormMessage ───────────────────────────────────
+// ─── 2. MultiMessageResults.addFormMessage ───────────────────────────────────
 
 describe("MultiMessageResults.addFormMessage", () => {
     it.fails("should store the message once when called", () => {
@@ -104,7 +67,7 @@ describe("MultiMessageResults.addFormMessage", () => {
     });
 });
 
-// ─── 4. isEqual and repeated object references ───────────────────────────────
+// ─── 3. isEqual and repeated object references ───────────────────────────────
 
 describe("isEqual – repeated references", () => {
     it.fails("should report the values as equal when one side reuses the same reference twice", () => {
@@ -118,7 +81,7 @@ describe("isEqual – repeated references", () => {
     });
 });
 
-// ─── 5. form dirty flag survives the last dirty field unmounting ─────────────
+// ─── 4. form dirty flag survives the last dirty field unmounting ─────────────
 
 describe("KertyForm – unsubscribing a dirty field", () => {
     it.fails("should recompute the form dirty flag when the last dirty field unsubscribes", () => {
@@ -135,7 +98,7 @@ describe("KertyForm – unsubscribing a dirty field", () => {
     });
 });
 
-// ─── 6. prependItems does not guard against a null value ─────────────────────
+// ─── 5. prependItems does not guard against a null value ─────────────────────
 
 describe("KertyForm.prependItems", () => {
     it.fails("should leave the array unchanged when the value is null", () => {
@@ -149,7 +112,7 @@ describe("KertyForm.prependItems", () => {
     });
 });
 
-// ─── 7. swapItem does not validate its indices ───────────────────────────────
+// ─── 6. swapItem does not validate its indices ───────────────────────────────
 
 describe("KertyForm.swapItem", () => {
     it.fails("should leave the array unchanged when an index is out of range", () => {
@@ -163,7 +126,7 @@ describe("KertyForm.swapItem", () => {
     });
 });
 
-// ─── 8. touch() on an unregistered field is a silent no-op ───────────────────
+// ─── 7. touch() on an unregistered field is a silent no-op ───────────────────
 
 describe("KertyForm.touch", () => {
     it.fails("should mark the form touched when called for a field that has no listener", () => {
@@ -178,7 +141,7 @@ describe("KertyForm.touch", () => {
     });
 });
 
-// ─── 9. reading a validation result registers the field as a side effect ─────
+// ─── 8. reading a validation result registers the field as a side effect ─────
 
 describe("KertyForm.getFieldValidationResult", () => {
     it.fails("should not register the field when only its validation result is read", () => {

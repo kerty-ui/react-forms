@@ -1069,7 +1069,7 @@ export class KertyForm<TData> implements IKertyForm<TData> {
         }
 
         if(this.#validator != null) {
-            if(field.state.isValidated || (this.#isMessageDrivenValidator && this.#state.isValidated)) {
+            if(field.state.isValidated || this.#state.isValidated) {
                 if (this.#isMessageDrivenValidator) {
                     for (const invalidFieldName of this.#invalidFields) {
                         const invalidField = this.#fields.get(invalidFieldName);
@@ -1107,6 +1107,10 @@ export class KertyForm<TData> implements IKertyForm<TData> {
                     const validatedField = this.#getField(fieldName);
                     if(validationResult.messages.length > 0) {
                         validatedField.validationResult = validationResult;
+                        listenerOptions.fieldValidationChanged = true;
+                    }
+                    else if(validatedField.validationResult != null) {
+                        validatedField.validationResult = undefined;
                         listenerOptions.fieldValidationChanged = true;
                     }
 

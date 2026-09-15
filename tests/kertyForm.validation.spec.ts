@@ -176,6 +176,120 @@ describe("KertyForm – fieldDriven revalidation on change", () => {
     });
 });
 
+// ─── on-change revalidation after a passing validate ─────────────────────────
+
+describe("KertyForm – fieldDriven revalidation after a passing validate", () => {
+    it("should flag the field when it is cleared after having passed full validation", () => {
+        const form = mountedForm(requiredLoginValidator(), { username: "bob", password: "pw" });
+        form.validate();
+
+        form.setFieldValue("username", "");
+
+        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
+    });
+
+    it("should make the form invalid when a passing field is cleared after full validation", () => {
+        const form = mountedForm(requiredLoginValidator(), { username: "bob", password: "pw" });
+        form.validate();
+
+        form.setFieldValue("username", "");
+
+        expect(form.getState().isValid).toBe(false);
+    });
+
+    it("should still not validate on change when the form has never been validated", () => {
+        const form = mountedForm(requiredLoginValidator(), { username: "bob", password: "pw" });
+
+        form.setFieldValue("username", "");
+
+        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+    });
+
+    it("should validate a field that was registered after the form was validated", () => {
+        const form = new KertyForm<Partial<LoginForm>>({
+            data: { username: "bob", password: "pw" },
+            validator: requiredLoginValidator(),
+        });
+        form.addFieldListener("username", () => { });
+        form.validate();
+
+        form.addFieldListener("password", () => { });
+        form.setFieldValue("password", "");
+
+        expect(form.getFieldValidationMessage("password")?.text).toBe("Password is required");
+    });
+});
+
+// ─── dependent and conditional fields on change ──────────────────────────────
+
+describe("KertyForm – dependent fields on change", () => {
+    const passwordForm = (data: { password: string; confirmPassword: string }) => {
+        const form = new KertyForm<any>({
+            data,
+            validator: new Validator<any>({
+                _password: new FieldValidations({ check: isTextEmpty, message: "Password is required" }),
+                _confirmPassword: new FieldValidations({
+                    check: (ctx) => ctx.value !== ctx.parent.password,
+                    message: "Passwords must match",
+                    hasDependency: true,
+                }),
+            }),
+        });
+        form.addFieldListener("password", () => { });
+        form.addFieldListener("confirmPassword", () => { });
+        return form;
+    };
+
+    it("should flag the dependent field when the field it depends on changes", () => {
+        const form = passwordForm({ password: "abc", confirmPassword: "abc" });
+        form.validate();
+
+        form.setFieldValue("password", "xyz");
+
+        expect(form.getFieldValidationMessage("confirmPassword")?.text).toBe("Passwords must match");
+    });
+
+    it("should make the form invalid when the dependent field starts failing", () => {
+        const form = passwordForm({ password: "abc", confirmPassword: "abc" });
+        form.validate();
+
+        form.setFieldValue("password", "xyz");
+
+        expect(form.getState().isValid).toBe(false);
+    });
+
+    it("should clear the dependent field message when it becomes valid again", () => {
+        const form = passwordForm({ password: "abc", confirmPassword: "abc" });
+        form.validate();
+        form.setFieldValue("password", "xyz");
+
+        form.setFieldValue("password", "abc");
+
+        expect(form.getFieldValidationMessage("confirmPassword")).toBeUndefined();
+    });
+
+    it("should make the form valid again when the dependent field stops failing", () => {
+        const form = passwordForm({ password: "abc", confirmPassword: "abc" });
+        form.validate();
+        form.setFieldValue("password", "xyz");
+
+        form.setFieldValue("password", "abc");
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it("should notify the dependent field's listener when it starts failing", () => {
+        const form = passwordForm({ password: "abc", confirmPassword: "abc" });
+        form.validate();
+        let calls = 0;
+        form.addFieldListener("confirmPassword", () => calls++);
+
+        form.setFieldValue("password", "xyz");
+
+        expect(calls).toBe(1);
+    });
+});
+
 // ─── on-change revalidation of array item fields ─────────────────────────────
 
 describe("KertyForm – fieldDriven revalidation of array item fields", () => {
