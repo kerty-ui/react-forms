@@ -283,6 +283,14 @@ describe("KertyForm.swapItem", () => {
         expect(form.getData().items).toEqual(["c", "b", "a"]);
     });
 
+    it("should exchange the outer items when the first and last are swapped", () => {
+        const form = listForm(["a", "b", "c", "d"]);
+
+        form.swapItem("items", 0, 3);
+
+        expect(form.getData().items).toEqual(["d", "b", "c", "a"]);
+    });
+
     it("should leave the array unchanged when both indices are the same", () => {
         const items = ["a", "b", "c"];
         const form = new KertyForm<ListForm>({ data: { items } });
@@ -301,6 +309,64 @@ describe("KertyForm.swapItem", () => {
         form.swapItem("items", 1, 1);
 
         expect(count.calls).toBe(0);
+    });
+
+    it.each([
+        ["toIndex is past the end", 0, 9],
+        ["fromIndex is past the end", 9, 0],
+        ["fromIndex is negative", -1, 0],
+        ["toIndex is negative", 0, -1],
+        ["fromIndex is fractional", 1.5, 0],
+        ["toIndex is fractional", 0, 1.5],
+        ["fromIndex is NaN", NaN, 0],
+    ])("should leave the array unchanged when %s", (_label, fromIndex, toIndex) => {
+        const form = listForm();
+
+        form.swapItem("items", fromIndex, toIndex);
+
+        expect(form.getData().items).toEqual(["a", "b", "c"]);
+    });
+
+    it("should not grow the array when an index is past the end", () => {
+        const form = listForm();
+
+        form.swapItem("items", 0, 9);
+
+        expect(form.getData().items).toHaveLength(3);
+    });
+
+    it("should not add a phantom property when an index is negative", () => {
+        const form = listForm();
+
+        form.swapItem("items", -1, 0);
+
+        expect(Object.keys(form.getData().items)).toEqual(["0", "1", "2"]);
+    });
+
+    it("should not notify listeners when an index is out of range", () => {
+        const form = listForm();
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
+
+        form.swapItem("items", 0, 9);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should leave the data unchanged when the target is not an array", () => {
+        const form = new KertyForm<any>({ data: { items: "not an array" } });
+
+        form.swapItem("items", 0, 1);
+
+        expect(form.getData().items).toBe("not an array");
+    });
+
+    it("should swap the items when the array is empty apart from the two targets", () => {
+        const form = listForm(["a", "b"]);
+
+        form.swapItem("items", 0, 1);
+
+        expect(form.getData().items).toEqual(["b", "a"]);
     });
 });
 
@@ -329,6 +395,64 @@ describe("KertyForm.moveItem", () => {
         form.moveItem("items", 1, 1);
 
         expect(form.getData().items).toEqual(["a", "b", "c"]);
+    });
+
+    it("should leave the array unchanged when fromIndex is past the end", () => {
+        const form = listForm();
+
+        form.moveItem("items", 9, 0);
+
+        expect(form.getData().items).toEqual(["a", "b", "c"]);
+    });
+
+    it("should not grow the array when fromIndex is past the end", () => {
+        const form = listForm();
+
+        form.moveItem("items", 9, 0);
+
+        expect(form.getData().items).toHaveLength(3);
+    });
+
+    it("should not notify listeners when fromIndex is past the end", () => {
+        const form = listForm();
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
+
+        form.moveItem("items", 9, 0);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should move the last item when fromIndex is negative", () => {
+        const form = listForm();
+
+        form.moveItem("items", -1, 0);
+
+        expect(form.getData().items).toEqual(["c", "a", "b"]);
+    });
+
+    it("should move the item to the end when toIndex is past the end", () => {
+        const form = listForm();
+
+        form.moveItem("items", 0, 9);
+
+        expect(form.getData().items).toEqual(["b", "c", "a"]);
+    });
+
+    it("should move the item when the item being moved is null", () => {
+        const form = new KertyForm<any>({ data: { items: [null, "b"] } });
+
+        form.moveItem("items", 0, 1);
+
+        expect(form.getData().items).toEqual(["b", null]);
+    });
+
+    it("should leave the data unchanged when the target is not an array", () => {
+        const form = new KertyForm<any>({ data: { items: "not an array" } });
+
+        form.moveItem("items", 0, 1);
+
+        expect(form.getData().items).toBe("not an array");
     });
 });
 
@@ -359,6 +483,53 @@ describe("KertyForm.updateItem", () => {
         form.updateItem("items", 0, "z");
 
         expect(form.getData().items).toBe("not an array");
+    });
+
+    it("should write the value when the new value is null", () => {
+        const form = listForm();
+
+        form.updateItem("items", 1, null as any);
+
+        expect(form.getData().items).toEqual(["a", null, "c"]);
+    });
+
+    it.each([
+        ["the index is past the end", 9],
+        ["the index is negative", -1],
+        ["the index is fractional", 1.5],
+        ["the index is NaN", NaN],
+    ])("should leave the array unchanged when %s", (_label, index) => {
+        const form = listForm();
+
+        form.updateItem("items", index, "z");
+
+        expect(form.getData().items).toEqual(["a", "b", "c"]);
+    });
+
+    it("should not grow the array when the index is past the end", () => {
+        const form = listForm();
+
+        form.updateItem("items", 9, "z");
+
+        expect(form.getData().items).toHaveLength(3);
+    });
+
+    it("should not add a phantom property when the index is negative", () => {
+        const form = listForm();
+
+        form.updateItem("items", -1, "z");
+
+        expect(Object.keys(form.getData().items)).toEqual(["0", "1", "2"]);
+    });
+
+    it("should not notify listeners when the index is out of range", () => {
+        const form = listForm();
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
+
+        form.updateItem("items", 9, "z");
+
+        expect(count.calls).toBe(0);
     });
 });
 

@@ -98,21 +98,7 @@ describe("KertyForm – unsubscribing a dirty field", () => {
     });
 });
 
-// ─── 5. swapItem does not validate its indices ───────────────────────────────
-
-describe("KertyForm.swapItem", () => {
-    it.fails("should leave the array unchanged when an index is out of range", () => {
-        // The swap writes through to `arrayValue[toIndex]`, growing the array and
-        // filling the gap with empty slots instead of rejecting the call.
-        const form = new KertyForm<any>({ data: { items: ["a", "b", "c"] } });
-
-        form.swapItem("items", 0, 9);
-
-        expect(form.getData().items).toEqual(["a", "b", "c"]);
-    });
-});
-
-// ─── 6. touch() on an unregistered field is a silent no-op ───────────────────
+// ─── 5. touch() on an unregistered field is a silent no-op ───────────────────
 
 describe("KertyForm.touch", () => {
     it.fails("should mark the form touched when called for a field that has no listener", () => {
@@ -127,7 +113,7 @@ describe("KertyForm.touch", () => {
     });
 });
 
-// ─── 7. reading a validation result registers the field as a side effect ─────
+// ─── 6. reading a validation result registers the field as a side effect ─────
 
 describe("KertyForm.getFieldValidationResult", () => {
     it.fails("should not register the field when only its validation result is read", () => {

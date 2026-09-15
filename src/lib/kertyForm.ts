@@ -50,6 +50,9 @@ const defaultFieldSnapshot = {
     validationResult: undefined,
 } as FieldSnapshot<any>;
 
+const isExistingItemIndex = (index: number, length: number) =>
+    Number.isInteger(index) && index >= 0 && index < length;
+
 export const defaultFormConfig = {
     dirtyCheckEnabled: true,
     dirtyCheckEmptyStringAsNull: true,
@@ -924,6 +927,11 @@ export class KertyForm<TData> implements IKertyForm<TData> {
             return;
         }
 
+        if(!isExistingItemIndex(fromIndex, currentValue.length)
+            || !isExistingItemIndex(toIndex, currentValue.length)) {
+            return;
+        }
+
         if(fromIndex === toIndex) {
             return;
         }
@@ -953,8 +961,13 @@ export class KertyForm<TData> implements IKertyForm<TData> {
         }
 
         const arrayValue = [...currentValue];
-        const [item] = arrayValue.splice(fromIndex, 1);
-        arrayValue.splice(toIndex, 0, item);
+        const removedItems = arrayValue.splice(fromIndex, 1);
+
+        if(removedItems.length === 0) {
+            return;
+        }
+
+        arrayValue.splice(toIndex, 0, removedItems[0]);
 
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
 
@@ -974,6 +987,10 @@ export class KertyForm<TData> implements IKertyForm<TData> {
 
         const currentValue = getObjectValue(this.#data, field.path) ?? [];
         if(!Array.isArray(currentValue)) {
+            return;
+        }
+
+        if(!isExistingItemIndex(index, currentValue.length)) {
             return;
         }
 
