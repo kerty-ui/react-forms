@@ -1,0 +1,322 @@
+import { describe, expect, it } from "vitest";
+import { KertyForm } from "../src/lib/kertyForm";
+import { ValidationResult } from "../src/lib/validation/validationResult";
+import { Severity, type FormListenerOptions } from "../src/lib/types";
+
+/**
+ * These tests pin down the notification model, which is what lets the same form be
+ * consumed either as a single re-rendering unit (`useFormWatch` / `useWatch` — a form
+ * listener) or as independently re-rendering fields (`useField` / `FormField` — a field
+ * listener). Over-notifying is not a correctness bug but it is a performance regression,
+ * so call counts are asserted explicitly.
+ */
+
+const dataOnly: FormListenerOptions = {
+    listenDataChange: true,
+    listenStateChange: false,
+    listenValidationChange: false,
+    listenFieldValidationChange: false,
+};
+
+const stateOnly: FormListenerOptions = {
+    listenDataChange: false,
+    listenStateChange: true,
+    listenValidationChange: false,
+    listenFieldValidationChange: false,
+};
+
+const formValidationOnly: FormListenerOptions = {
+    listenDataChange: false,
+    listenStateChange: false,
+    listenValidationChange: true,
+    listenFieldValidationChange: false,
+};
+
+const counter = () => {
+    const state = { calls: 0 };
+    return [state, () => { state.calls++; }] as const;
+};
+
+// ─── whole form listeners ────────────────────────────────────────────────────
+
+describe("KertyForm.addListener", () => {
+    it("should notify the listener when any field value changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        form.addListener(listener);
+
+        form.setFieldValue("a", 2);
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should notify the listener only once when a single change touches data and state", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        form.addListener(listener);
+
+        form.setFieldValue("a", 2);
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should stop notifying the listener when the returned unsubscribe is called", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        const unsubscribe = form.addListener(listener);
+        unsubscribe();
+
+        form.setFieldValue("a", 2);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should notify a data-only listener when a field value changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        form.addListener(listener, dataOnly);
+
+        form.setFieldValue("a", 2);
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify a data-only listener when only the form state changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        form.addListener(listener, dataOnly);
+
+        form.touch();
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should notify a state-only listener when the form becomes touched", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        form.addListener(listener, stateOnly);
+
+        form.touch();
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify a state-only listener when a change leaves the form state unchanged", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        form.setFieldValue("a", 2);
+        const [count, listener] = counter();
+        form.addListener(listener, stateOnly);
+
+        form.setFieldValue("a", 3);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should notify a form-validation listener when a form validation result is applied", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        form.addListener(listener, formValidationOnly);
+
+        form.applyValidationResult(new ValidationResult().add({ text: "boom", severity: Severity.Error }));
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify any listener when a silent change is made", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        form.addListener(listener);
+
+        form.setFieldValue("a", 2, true);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should not notify a listener when touch is called twice and nothing changes the second time", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        form.touch();
+        const [count, listener] = counter();
+        form.addListener(listener);
+
+        form.touch();
+
+        expect(count.calls).toBe(0);
+    });
+});
+
+// ─── field listeners ─────────────────────────────────────────────────────────
+
+describe("KertyForm.addFieldListener", () => {
+    it("should notify the listener when its own field changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
+        const [count, listener] = counter();
+        form.addFieldListener("a", listener);
+
+        form.setFieldValue("a", 2);
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify the listener when a sibling field changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
+        const [count, listener] = counter();
+        form.addFieldListener("a", listener);
+
+        form.setFieldValue("b", 2);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should not notify the listener when only the form state changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        form.addFieldListener("a", listener);
+
+        form.touch();
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should stop notifying the listener when the returned unsubscribe is called", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        const unsubscribe = form.addFieldListener("a", listener);
+        unsubscribe();
+
+        form.setFieldValue("a", 2);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should notify both listeners when two listeners share one field", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [first, firstListener] = counter();
+        const [second, secondListener] = counter();
+        form.addFieldListener("a", firstListener);
+        form.addFieldListener("a", secondListener);
+
+        form.setFieldValue("a", 2);
+
+        expect([first.calls, second.calls]).toEqual([1, 1]);
+    });
+
+    it("should keep notifying the remaining listener when one of two listeners on a field unsubscribes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [remaining, remainingListener] = counter();
+        form.addFieldListener("a", remainingListener);
+        form.addFieldListener("a", () => { })();
+
+        form.setFieldValue("a", 2);
+
+        expect(remaining.calls).toBe(1);
+    });
+
+    it("should notify the listener when its field validation result changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const [count, listener] = counter();
+        form.addFieldListener("a", listener);
+
+        form.applyFieldValidationResult("a", new ValidationResult().add({ text: "boom" }));
+
+        expect(count.calls).toBe(1);
+    });
+});
+
+// ─── hierarchical notification ───────────────────────────────────────────────
+
+describe("KertyForm – hierarchical field notification", () => {
+    it("should notify a child field listener when its parent object is replaced", () => {
+        const form = new KertyForm<any>({ data: { person: { name: "John" } } });
+        const [count, listener] = counter();
+        form.addFieldListener("person.name", listener);
+
+        form.setFieldValue("person", { name: "Jane" });
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should notify an array item listener when the whole array is replaced", () => {
+        const form = new KertyForm<any>({ data: { items: ["a"] } });
+        const [count, listener] = counter();
+        form.addFieldListener("items[0]", listener);
+
+        form.setFieldValue("items", ["b"]);
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should notify a deeply nested listener when a top-level ancestor is replaced", () => {
+        const form = new KertyForm<any>({ data: { a: { b: { c: 1 } } } });
+        const [count, listener] = counter();
+        form.addFieldListener("a.b.c", listener);
+
+        form.setFieldValue("a", { b: { c: 2 } });
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify a listener whose field name merely shares a prefix with the changed field", () => {
+        const form = new KertyForm<any>({ data: { name: 1, nameSuffix: 1 } });
+        const [count, listener] = counter();
+        form.addFieldListener("nameSuffix", listener);
+
+        form.setFieldValue("name", 2);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should not notify a parent field listener when a child field changes", () => {
+        // By design: editing one cell must not re-render the component bound to the
+        // whole collection. Components that need the aggregate subscribe to the form
+        // (useDataWatch / useWatch) instead of to the parent field.
+        const form = new KertyForm<any>({ data: { items: [{ name: "a" }] } });
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
+
+        form.setFieldValue("items[0].name", "b");
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should still notify a whole-form listener when a nested child field changes", () => {
+        const form = new KertyForm<any>({ data: { items: [{ name: "a" }] } });
+        const [count, listener] = counter();
+        form.addListener(listener, dataOnly);
+
+        form.setFieldValue("items[0].name", "b");
+
+        expect(count.calls).toBe(1);
+    });
+});
+
+// ─── mixed subscriptions ─────────────────────────────────────────────────────
+
+describe("KertyForm – mixed subscriptions", () => {
+    it("should notify only the changed field and the form listener when one field changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
+        const [whole, wholeListener] = counter();
+        const [fieldA, fieldAListener] = counter();
+        const [fieldB, fieldBListener] = counter();
+        form.addListener(wholeListener);
+        form.addFieldListener("a", fieldAListener);
+        form.addFieldListener("b", fieldBListener);
+
+        form.setFieldValue("a", 2);
+
+        expect([whole.calls, fieldA.calls, fieldB.calls]).toEqual([1, 1, 0]);
+    });
+
+    it("should notify every listener when the form is reset", () => {
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
+        const [whole, wholeListener] = counter();
+        const [fieldA, fieldAListener] = counter();
+        const [fieldB, fieldBListener] = counter();
+        form.addListener(wholeListener);
+        form.addFieldListener("a", fieldAListener);
+        form.addFieldListener("b", fieldBListener);
+
+        form.reset();
+
+        expect([whole.calls, fieldA.calls, fieldB.calls]).toEqual([1, 1, 1]);
+    });
+});
