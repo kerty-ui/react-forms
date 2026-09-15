@@ -47,6 +47,14 @@ describe("KertyForm.appendItems", () => {
         expect(form.getData().items).toEqual(["a", "b", "c"]);
     });
 
+    it("should still append a falsy item when the value is an empty string", () => {
+        const form = listForm();
+
+        form.appendItems("items", "");
+
+        expect(form.getData().items).toEqual(["a", "b", "c", ""]);
+    });
+
     it("should leave the data unchanged when the target is not an array", () => {
         const form = new KertyForm<any>({ data: { items: { notAnArray: true } } });
 
@@ -113,6 +121,48 @@ describe("KertyForm.prependItems", () => {
         expect(form.getData().items).toEqual(["a"]);
     });
 
+    it("should leave the data unchanged when the value is null", () => {
+        const form = listForm();
+
+        form.prependItems("items", null as any);
+
+        expect(form.getData().items).toEqual(["a", "b", "c"]);
+    });
+
+    it("should leave the data unchanged when the value is undefined", () => {
+        const form = listForm();
+
+        form.prependItems("items", undefined as any);
+
+        expect(form.getData().items).toEqual(["a", "b", "c"]);
+    });
+
+    it("should not notify listeners when the value is null", () => {
+        const form = listForm();
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
+
+        form.prependItems("items", null as any);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should leave the data unchanged when the target is not an array", () => {
+        const form = new KertyForm<any>({ data: { items: { notAnArray: true } } });
+
+        form.prependItems("items", "a");
+
+        expect(form.getData().items).toEqual({ notAnArray: true });
+    });
+
+    it("should still prepend a falsy item when the value is an empty string", () => {
+        const form = listForm();
+
+        form.prependItems("items", "");
+
+        expect(form.getData().items).toEqual(["", "a", "b", "c"]);
+    });
+
     it("should notify the array field listener when items are prepended", () => {
         const form = listForm();
         const [count, listener] = counter();
@@ -165,6 +215,14 @@ describe("KertyForm.insertItems", () => {
         form.insertItems("items", 1, null as any);
 
         expect(form.getData().items).toEqual(["a", "b", "c"]);
+    });
+
+    it("should still insert a falsy item when the value is an empty string", () => {
+        const form = listForm();
+
+        form.insertItems("items", 1, "");
+
+        expect(form.getData().items).toEqual(["a", "", "b", "c"]);
     });
 });
 

@@ -796,6 +796,10 @@ export class KertyForm<TData> implements IKertyForm<TData> {
         value: ArrayItemType<TData, TPath> | ArrayItemType<TData, TPath>[],
         silent?: boolean): void {
 
+        if(value == null) {
+            return;
+        }
+
         const field = this.#getField(name as string);
 
         const currentValue = getObjectValue<ArrayItemType<TData, TPath>[]>(this.#data, field.path) ?? [];

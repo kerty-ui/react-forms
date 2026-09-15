@@ -98,21 +98,7 @@ describe("KertyForm – unsubscribing a dirty field", () => {
     });
 });
 
-// ─── 5. prependItems does not guard against a null value ─────────────────────
-
-describe("KertyForm.prependItems", () => {
-    it.fails("should leave the array unchanged when the value is null", () => {
-        // `appendItems` and `insertItems` both return early on a null value;
-        // `prependItems` is missing the same guard and inserts the null.
-        const form = new KertyForm<any>({ data: { items: ["a"] } });
-
-        form.prependItems("items", null as any);
-
-        expect(form.getData().items).toEqual(["a"]);
-    });
-});
-
-// ─── 6. swapItem does not validate its indices ───────────────────────────────
+// ─── 5. swapItem does not validate its indices ───────────────────────────────
 
 describe("KertyForm.swapItem", () => {
     it.fails("should leave the array unchanged when an index is out of range", () => {
@@ -126,7 +112,7 @@ describe("KertyForm.swapItem", () => {
     });
 });
 
-// ─── 7. touch() on an unregistered field is a silent no-op ───────────────────
+// ─── 6. touch() on an unregistered field is a silent no-op ───────────────────
 
 describe("KertyForm.touch", () => {
     it.fails("should mark the form touched when called for a field that has no listener", () => {
@@ -141,7 +127,7 @@ describe("KertyForm.touch", () => {
     });
 });
 
-// ─── 8. reading a validation result registers the field as a side effect ─────
+// ─── 7. reading a validation result registers the field as a side effect ─────
 
 describe("KertyForm.getFieldValidationResult", () => {
     it.fails("should not register the field when only its validation result is read", () => {
