@@ -41,6 +41,13 @@ const defaultFormState = {
     isValidated: false,
 } as FormState;
 
+const defaultFieldState = {
+    isTouched: false,
+    isDirty: false,
+    isValid: true,
+    isValidated: false,
+} as FieldState;
+
 const defaultFieldSnapshot = {
     isTouched: false,
     isDirty: false,
@@ -253,12 +260,7 @@ export class KertyForm<TData> implements IKertyForm<TData> {
     }
 
     getFieldState<TPath extends FieldPath<TData>>(name: TPath): FieldState {
-        return this.#fields.get(name as string)?.state ?? {
-            isTouched: false,
-            isDirty: false,
-            isValid: true,
-            isValidated: false,
-        };
+        return this.#fields.get(name as string)?.state ?? defaultFieldState;
     }
 
     setFieldValue<TValue>(name: FieldPathByValue<TData, TValue>, value: TValue | null | undefined, silent?: boolean): void;
