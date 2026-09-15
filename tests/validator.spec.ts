@@ -433,6 +433,101 @@ describe("Validator.validate – scoped to a changed field", () => {
         expect([...result.keys()]).toEqual(["items[0]", "items[1]", "items[2]"]);
     });
 
+    it("should revalidate the array item field when that field changes", () => {
+        const validator = new Validator<any>({
+            items: [{ _name: new FieldValidations(required("Name is required")) }],
+        });
+
+        const result = validator.validate({
+            data: { items: [{ name: "" }] },
+            fieldName: "items[0].name",
+        });
+
+        expect(textsFor(result, "items[0].name")).toEqual(["Name is required"]);
+    });
+
+    it("should revalidate the item field at every index when one item field changes", () => {
+        const validator = new Validator<any>({
+            items: [{ _name: new FieldValidations(required("Name is required")) }],
+        });
+
+        const result = validator.validate({
+            data: { items: [{ name: "a" }, { name: "b" }] },
+            fieldName: "items[1].name",
+        });
+
+        expect([...result.keys()].sort()).toEqual(["items[0].name", "items[1].name"]);
+    });
+
+    it("should revalidate the inner array item when a nested array item changes", () => {
+        const validator = new Validator<any>({
+            matrix: [[new FieldValidations(required("Cell is required"))]],
+        });
+
+        const result = validator.validate({
+            data: { matrix: [["", "b"]] },
+            fieldName: "matrix[0][0]",
+        });
+
+        expect(textsFor(result, "matrix[0][0]")).toEqual(["Cell is required"]);
+    });
+
+    it("should revalidate the field when it sits under two levels of arrays", () => {
+        const validator = new Validator<any>({
+            orders: [{ lines: [{ _sku: new FieldValidations(required("Sku is required")) }] }],
+        });
+
+        const result = validator.validate({
+            data: { orders: [{ lines: [{ sku: "" }] }] },
+            fieldName: "orders[0].lines[0].sku",
+        });
+
+        expect(textsFor(result, "orders[0].lines[0].sku")).toEqual(["Sku is required"]);
+    });
+
+    it("should revalidate the field when an array is nested inside an object", () => {
+        const validator = new Validator<any>({
+            nested: { items: [{ _label: new FieldValidations(required("Label is required")) }] },
+        });
+
+        const result = validator.validate({
+            data: { nested: { items: [{ label: "" }] } },
+            fieldName: "nested.items[0].label",
+        });
+
+        expect(textsFor(result, "nested.items[0].label")).toEqual(["Label is required"]);
+    });
+
+    it("should skip an unrelated array item field when a sibling array's field changes", () => {
+        const validator = new Validator<any>({
+            items: [{ _name: new FieldValidations(required("Name is required")) }],
+            others: [{ _name: new FieldValidations(required("Other name is required")) }],
+        });
+
+        const result = validator.validate({
+            data: { items: [{ name: "" }], others: [{ name: "" }] },
+            fieldName: "items[0].name",
+        });
+
+        expect([...result.keys()]).toEqual(["items[0].name"]);
+    });
+
+    it("should skip a sibling field of the same array item when one field changes", () => {
+        const validator = new Validator<any>({
+            items: [{
+                _name: new FieldValidations(required("Name is required")),
+                _code: new FieldValidations(required("Code is required")),
+            }],
+        });
+
+        const result = validator.validate({
+            data: { items: [{ name: "", code: "" }] },
+            fieldName: "items[0].name",
+        });
+
+        expect([...result.keys()]).toEqual(["items[0].name"]);
+    });
+
     it("should return no results when the changed field has no registered rules", () => {
         const validator = new Validator<{ name: string }>({
             _name: new FieldValidations(required("Name is required")),

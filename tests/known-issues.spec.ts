@@ -24,57 +24,37 @@ const textsFor = (result: Map<string, IValidationResult>, field: string) =>
 
 const isTextEmpty = (ctx: any) => Validations.IsTextEmpty(ctx.value);
 
-// ─── 1. on-change validation never reaches array item fields ─────────────────
+// ─── 1. a field that passed full validation is never revalidated on change ───
 
-describe("Validator – array item fields on change", () => {
-    it.fails("should revalidate the array item field when that field changes", () => {
-        // `Validator.validate` normalises the incoming field name to `items[].name`, but
-        // `#validateInternal` builds concrete names (`items[0].name`), so the equality
-        // check never matches. Effect: a grid/repeater cell shows its error after an
-        // explicit `validate()` but is never re-validated (nor cleared) while typing.
-        const validator = new Validator<any>({
-            items: [{ _name: new FieldValidations({ check: isTextEmpty, message: "Name is required" }) }],
-        });
-
-        const result = validator.validate({
-            data: { items: [{ name: "" }] },
-            fieldName: "items[0].name",
-        });
-
-        expect(textsFor(result, "items[0].name")).toEqual(["Name is required"]);
+describe("KertyForm – fieldDriven revalidation after a passing validate", () => {
+    const requiredName = () => new Validator<any>({
+        _name: new FieldValidations({ check: isTextEmpty, message: "Name is required" }),
     });
 
-    it.fails("should revalidate the inner array item when a nested array item changes", () => {
-        // Same root cause one level deeper: the built name is `matrix[0][]`, the
-        // normalised incoming name is `matrix[][]`.
-        const validator = new Validator<any>({
-            matrix: [[new FieldValidations({ check: isTextEmpty, message: "Cell is required" })]],
-        });
-
-        const result = validator.validate({
-            data: { matrix: [["", "b"]] },
-            fieldName: "matrix[0][0]",
-        });
-
-        expect(textsFor(result, "matrix[0][0]")).toEqual(["Cell is required"]);
-    });
-
-    it.fails("should keep the form invalid when an array item field is edited but still invalid", () => {
-        // Worst downstream effect of the two cases above. On change the form eagerly
-        // clears the field's error and removes it from `#invalidFields` *before* asking
-        // the validator, expecting the validator to re-add it. Because the validator
-        // never matches the indexed path it returns nothing, so a still-empty required
-        // cell silently flips the whole form to valid and submit goes through.
-        const form = new KertyForm<any>({
-            data: { items: [{ name: "" }] },
-            validator: new Validator<any>({
-                items: [{ _name: new FieldValidations({ check: isTextEmpty, message: "Name is required" }) }],
-            }),
-        });
-        form.addFieldListener("items[0].name", () => { });
+    it.fails("should flag the field when it is cleared after having passed full validation", () => {
+        // During full validation `Validator` only returns entries for fields that
+        // produced messages, so a *passing* field is left `isValidated: false`. The
+        // on-change guard in `#onFieldChange` requires `isValidated`, so the field is
+        // never re-checked: emptying a required field after a successful submit leaves
+        // no message and the form reports itself valid.
+        // Note the asymmetry — a messageDriven validator re-runs on any change once the
+        // form is validated, so it handles this case correctly (asserted as normal
+        // behaviour in kertyForm.validation.spec.ts).
+        const form = new KertyForm<any>({ data: { name: "John" }, validator: requiredName() });
+        form.addFieldListener("name", () => { });
         form.validate();
 
-        form.setFieldValue("items[0].name", "");
+        form.setFieldValue("name", "");
+
+        expect(form.getFieldValidationMessage("name")?.text).toBe("Name is required");
+    });
+
+    it.fails("should keep the form invalid when a passing field is cleared after full validation", () => {
+        const form = new KertyForm<any>({ data: { name: "John" }, validator: requiredName() });
+        form.addFieldListener("name", () => { });
+        form.validate();
+
+        form.setFieldValue("name", "");
 
         expect(form.getState().isValid).toBe(false);
     });

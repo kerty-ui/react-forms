@@ -117,8 +117,9 @@ export class Validator<TData = any> implements IValidator<TData> {
 
         const stack: Array<{
             ctx: ValidationContext<TData, any>;
+            path: string;
             validations: RawValidationsSchema | RawValidationsSchemaArray;
-        }> = [{ ctx, validations }];
+        }> = [{ ctx, path: "", validations }];
 
         while (stack.length > 0) {
             const frame = stack.pop();
@@ -128,6 +129,7 @@ export class Validator<TData = any> implements IValidator<TData> {
             }
 
             const currentCtx = frame.ctx;
+            const currentPath = frame.path;
             const currentValidations = frame.validations;
 
             if (currentCtx.value == null || currentValidations == null) {
@@ -135,6 +137,7 @@ export class Validator<TData = any> implements IValidator<TData> {
             }
 
             if (Array.isArray(currentValidations)) {
+                const itemPath = `${currentPath}[]`;
                 for(let vIndex = 0; vIndex < currentValidations.length; vIndex++) {
                     const childValidation = currentValidations[vIndex];
                     if(childValidation instanceof FieldValidations)
@@ -142,7 +145,7 @@ export class Validator<TData = any> implements IValidator<TData> {
                         if(fieldName == null
                             || childValidation.hasDependency
                             || childValidation.hasCondition
-                            || fieldName === `${currentCtx.fieldName}[]`) {
+                            || fieldName === itemPath) {
 
                             for (let index = 0; index < currentCtx.value.length; index++) {
                                 const itemValidationContext = {
@@ -174,6 +177,7 @@ export class Validator<TData = any> implements IValidator<TData> {
                                     value: currentCtx.value[index],
                                     fieldName: `${currentCtx.fieldName}[${index}]`,
                                 },
+                                path: itemPath,
                                 validations: childValidation,
                             });
                         }
@@ -189,6 +193,7 @@ export class Validator<TData = any> implements IValidator<TData> {
                                 value: currentCtx.value[index],
                                 fieldName: `${currentCtx.fieldName}[${index}].`,
                             },
+                            path: `${itemPath}.`,
                             validations: childValidation,
                         });
                     }
@@ -212,12 +217,14 @@ export class Validator<TData = any> implements IValidator<TData> {
                     fieldName: currentCtx.fieldName + propName,
                 } as ValidationContext<TData, any>;
 
+                const propPath = currentPath + propName;
+
                 if (validation instanceof FieldValidations) {
 
                     if(fieldName == null
                         || validation.hasDependency
                         || validation.hasCondition
-                        || fieldName === validationContext.fieldName) {
+                        || fieldName === propPath) {
                         const validationResult = this.#runValidations(ruleSet, validationContext, validation.validations);
                         if(validationResult.messages.length > 0 || fieldName != null) {
                             validationsResult.set(validationContext.fieldName, validationResult);
@@ -229,6 +236,7 @@ export class Validator<TData = any> implements IValidator<TData> {
                 if (Array.isArray(validation) && Array.isArray(validationContext.value)) {
                     stack.push({
                         ctx: validationContext,
+                        path: propPath,
                         validations: validation,
                     });
                 }
@@ -238,6 +246,7 @@ export class Validator<TData = any> implements IValidator<TData> {
                             ...validationContext,
                             fieldName: validationContext.fieldName + ".",
                         },
+                        path: `${propPath}.`,
                         validations: validation,
                     });
                 }

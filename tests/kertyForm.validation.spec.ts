@@ -176,6 +176,76 @@ describe("KertyForm – fieldDriven revalidation on change", () => {
     });
 });
 
+// ─── on-change revalidation of array item fields ─────────────────────────────
+
+describe("KertyForm – fieldDriven revalidation of array item fields", () => {
+    const gridForm = (items: { name: string }[]) => {
+        const form = new KertyForm<any>({
+            data: { items },
+            validator: new Validator<any>({
+                items: [{ _name: new FieldValidations({ check: isTextEmpty, message: "Name is required" }) }],
+            }),
+        });
+        items.forEach((_, index) => form.addFieldListener(`items[${index}].name`, () => { }));
+        return form;
+    };
+
+    it("should keep the form invalid when the edited item field is still empty", () => {
+        const form = gridForm([{ name: "" }]);
+        form.validate();
+
+        form.setFieldValue("items[0].name", "");
+
+        expect(form.getState().isValid).toBe(false);
+    });
+
+    it("should keep the item message when the edited item field is still empty", () => {
+        const form = gridForm([{ name: "" }]);
+        form.validate();
+
+        form.setFieldValue("items[0].name", "");
+
+        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+    });
+
+    it("should clear the item message when the edited item field is filled in", () => {
+        const form = gridForm([{ name: "" }]);
+        form.validate();
+
+        form.setFieldValue("items[0].name", "John");
+
+        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+    });
+
+    it("should make the form valid when the last failing item field is filled in", () => {
+        const form = gridForm([{ name: "" }]);
+        form.validate();
+
+        form.setFieldValue("items[0].name", "John");
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it("should keep the form invalid when another item is still failing", () => {
+        const form = gridForm([{ name: "" }, { name: "" }]);
+        form.validate();
+
+        form.setFieldValue("items[0].name", "John");
+
+        expect(form.getState().isValid).toBe(false);
+    });
+
+    it("should report the item message again when an item field is cleared after having failed once", () => {
+        const form = gridForm([{ name: "" }]);
+        form.validate();
+        form.setFieldValue("items[0].name", "John");
+
+        form.setFieldValue("items[0].name", "");
+
+        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+    });
+});
+
 // ─── on-change revalidation, messageDriven ───────────────────────────────────
 
 describe("KertyForm – messageDriven revalidation on change", () => {
