@@ -684,7 +684,7 @@ export class KertyForm<TData> implements IKertyForm<TData> {
     }
 
     getFieldValidationResult(name: FieldPath<TData>) {
-        return this.#getField(name as string)?.validationResult;
+        return this.#fields.get(name as string)?.validationResult;
     }
 
     getFieldValidationMessage(name: FieldPath<TData>) {

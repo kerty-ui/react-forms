@@ -570,6 +570,60 @@ describe("KertyForm – externally applied field results without a validator", (
     });
 });
 
+describe("KertyForm.getFieldValidationResult", () => {
+    it("should return undefined when the field was never registered", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: { username: "bob" } });
+
+        expect(form.getFieldValidationResult("username")).toBeUndefined();
+    });
+
+    it("should not register the field when its validation result is read", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: { username: "bob" } });
+
+        form.getFieldValidationResult("username");
+
+        expect(form.getFieldValue("username")).toBeUndefined();
+    });
+
+    it("should not register the field when its validation message is read", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: { username: "bob" } });
+
+        form.getFieldValidationMessage("username");
+
+        expect(form.getFieldState("username").isValidated).toBe(false);
+    });
+
+    it("should return undefined when the field name is not a valid path", () => {
+        const form = new KertyForm<any>({ data: { username: "bob" } });
+
+        expect(form.getFieldValidationResult("not a path")).toBeUndefined();
+    });
+
+    it("should return the result when the validator reported on a field with no listener", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator: requiredLoginValidator() });
+        form.validate();
+
+        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
+    });
+
+    it("should return the result when the field is registered", () => {
+        const form = mountedForm();
+        form.applyFieldValidationResult("username", error("Taken"));
+
+        expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
+    });
+
+    it("should stop returning the result once the field unsubscribes", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {} });
+        const unsubscribe = form.addFieldListener("username", () => { });
+        form.applyFieldValidationResult("username", error("Taken"));
+
+        unsubscribe();
+
+        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+    });
+});
+
 describe("KertyForm.applyValidationResults", () => {
     it("should apply each field result when a map is given", () => {
         const form = mountedForm();
