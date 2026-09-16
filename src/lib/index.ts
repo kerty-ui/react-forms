@@ -14,11 +14,12 @@ export * from "./hooks/useDataWatch";
 export * from "./hooks/useStateWatch";
 export * from "./hooks/useField";
 export * from "./hooks/useFieldState";
-export * from "./hooks/useFieldValue.ts";
+export * from "./hooks/useFieldWatch";
+export * from "./hooks/useField";
 export * from "./hooks/useForm";
 export * from "./hooks/useFormWatch";
 
-export * from "./validation/validator.ts";
+export * from "./validation/validator";
 export * from "./validation/validations";
 export * from "./validation/validationResult";
 export * from "./validation/singleMessageDrivenValidator";
