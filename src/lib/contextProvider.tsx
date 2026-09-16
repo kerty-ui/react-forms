@@ -14,10 +14,13 @@ export const FormProvider = <TModel,>(props: {
     );
 };
 
-export const useFormContext = () => {
+export const useFormContext = (defaultForm?: IKertyForm<any>) => {
     const form = useContext<IKertyForm<any> | null>(formContext);
     if(form == null) {
-        throw new Error('useFormContext() must be used with-in FormProvider');
+        if(defaultForm == null) {
+            throw new Error('useFormContext() must be used with-in FormProvider');
+        }
+        return defaultForm;
     }
     return form;
 }
