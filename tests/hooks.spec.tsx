@@ -15,6 +15,7 @@ import {
     useFieldValue,
     useForm,
     useFormContext,
+    useFormValidationResult,
     useFormWatch,
     useStateWatch,
     useWatch,
@@ -420,6 +421,51 @@ describe("useStateWatch", () => {
 
 // ─── array fields ────────────────────────────────────────────────────────────
 
+describe("useFormValidationResult", () => {
+    it("should return undefined when the form has no validation result", () => {
+        const Component = () => {
+            const f = useForm<Partial<LoginForm>>();
+            const result = useFormValidationResult(f);
+            return <span data-testid="message">{result?.messages[0]?.text ?? ""}</span>;
+        };
+
+        render(<Component />);
+
+        expect(screen.getByTestId("message").textContent).toBe("");
+    });
+
+    it("should return the result when a form validation result is applied", () => {
+        const form = { current: null as any };
+        const Component = () => {
+            const f = useForm<Partial<LoginForm>>();
+            form.current = f;
+            const result = useFormValidationResult(f);
+            return <span data-testid="message">{result?.messages[0]?.text ?? ""}</span>;
+        };
+        render(<Component />);
+
+        act(() => form.current.applyValidationResult(new ValidationResult().add({ text: "Form is invalid" })));
+
+        expect(screen.getByTestId("message").textContent).toBe("Form is invalid");
+    });
+
+    it("should not re-render the subscriber when only a field value changes", () => {
+        const form = { current: null as any };
+        const Component = () => {
+            const f = useForm<Partial<LoginForm>>();
+            form.current = f;
+            useFormValidationResult(f);
+            return <RenderCount testId="validation" />;
+        };
+        render(<Component />);
+        const before = renderCountOf("validation");
+
+        act(() => form.current.setFieldValue("username", "bob"));
+
+        expect(renderCountOf("validation")).toBe(before);
+    });
+});
+
 describe("FormArrayField", () => {
     it("should render the current items when the array changes", () => {
         const form = { current: null as any };
@@ -662,5 +708,132 @@ describe("form validation flow", () => {
         ));
 
         expect(screen.getByTestId("message").textContent).toBe("Welcome, Chuck Norris!");
+    });
+});
+
+// ─── parent notification ─────────────────────────────────────────────────────
+
+type ParentForm = {
+    parent: { text: string; other: string };
+    sibling: string;
+};
+
+describe("useField – parent notification", () => {
+    it("should re-render the component bound to the parent when a child field changes", () => {
+        const form = { current: null as any };
+        const Parent = ({ f }: { f: IKertyForm<any> }) => {
+            useField<ParentForm["parent"]>(f, "parent");
+            return <RenderCount testId="parent" />;
+        };
+        const Component = () => {
+            const f = useForm<Partial<ParentForm>>({ data: { parent: { text: "a", other: "b" }, sibling: "s" } });
+            form.current = f;
+            return <Parent f={f} />;
+        };
+        render(<Component />);
+        const before = renderCountOf("parent");
+
+        act(() => form.current.setFieldValue("parent.text", "c"));
+
+        expect(renderCountOf("parent")).toBe(before + 1);
+    });
+
+    it("should expose the updated child value on the parent snapshot when a child field changes", () => {
+        const form = { current: null as any };
+        const Parent = ({ f }: { f: IKertyForm<any> }) => {
+            const field = useField<ParentForm["parent"]>(f, "parent");
+            return <span data-testid="text">{field.value?.text ?? ""}</span>;
+        };
+        const Component = () => {
+            const f = useForm<Partial<ParentForm>>({ data: { parent: { text: "a", other: "b" }, sibling: "s" } });
+            form.current = f;
+            return <Parent f={f} />;
+        };
+        render(<Component />);
+
+        act(() => form.current.setFieldValue("parent.text", "c"));
+
+        expect(screen.getByTestId("text").textContent).toBe("c");
+    });
+
+    it("should not re-render a sibling field when a child of another branch changes", () => {
+        const form = { current: null as any };
+        const Component = () => {
+            const f = useForm<Partial<ParentForm>>({ data: { parent: { text: "a", other: "b" }, sibling: "s" } });
+            form.current = f;
+            return (
+                <>
+                    <FormField form={f} name="parent.other">
+                        {() => <RenderCount testId="other" />}
+                    </FormField>
+                    <FormField form={f} name="sibling">
+                        {() => <RenderCount testId="sibling" />}
+                    </FormField>
+                </>
+            );
+        };
+        render(<Component />);
+        const before = { other: renderCountOf("other"), sibling: renderCountOf("sibling") };
+
+        act(() => form.current.setFieldValue("parent.text", "c"));
+
+        expect({ other: renderCountOf("other"), sibling: renderCountOf("sibling") }).toEqual(before);
+    });
+
+    it("should not re-render a component bound to the parent field state when a child field changes", () => {
+        const form = { current: null as any };
+        const Parent = ({ f }: { f: IKertyForm<any> }) => {
+            useFieldState(f, "parent");
+            return <RenderCount testId="parentState" />;
+        };
+        const Component = () => {
+            const f = useForm<Partial<ParentForm>>({ data: { parent: { text: "a", other: "b" }, sibling: "s" } });
+            form.current = f;
+            return <Parent f={f} />;
+        };
+        render(<Component />);
+        const before = renderCountOf("parentState");
+
+        act(() => form.current.setFieldValue("parent.text", "c"));
+
+        expect(renderCountOf("parentState")).toBe(before);
+    });
+
+    it("should not re-render a component bound to the array when a property of one of its items changes", () => {
+        const form = { current: null as any };
+        const List = ({ f }: { f: IKertyForm<any> }) => {
+            useField<{ text: string }[]>(f, "rows");
+            return <RenderCount testId="rows" />;
+        };
+        const Component = () => {
+            const f = useForm<any>({ data: { rows: [{ text: "a" }] } });
+            form.current = f;
+            return <List f={f} />;
+        };
+        render(<Component />);
+        const before = renderCountOf("rows");
+
+        act(() => form.current.setFieldValue("rows[0].text", "b"));
+
+        expect(renderCountOf("rows")).toBe(before);
+    });
+
+    it("should re-render the component bound to an array item when a property of that item changes", () => {
+        const form = { current: null as any };
+        const Row = ({ f }: { f: IKertyForm<any> }) => {
+            useField<{ text: string }>(f, "rows[0]");
+            return <RenderCount testId="row" />;
+        };
+        const Component = () => {
+            const f = useForm<any>({ data: { rows: [{ text: "a" }] } });
+            form.current = f;
+            return <Row f={f} />;
+        };
+        render(<Component />);
+        const before = renderCountOf("row");
+
+        act(() => form.current.setFieldValue("rows[0].text", "b"));
+
+        expect(renderCountOf("row")).toBe(before + 1);
     });
 });

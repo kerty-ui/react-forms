@@ -296,15 +296,132 @@ describe("KertyForm – hierarchical field notification", () => {
         expect(count.calls).toBe(0);
     });
 
-    it("should not notify a parent field listener when a child field changes", () => {
-        // By design: editing one cell must not re-render the component bound to the
-        // whole collection. Components that need the aggregate subscribe to the form
-        // (useDataWatch / useWatch) instead of to the parent field.
-        const form = new KertyForm<any>({ data: { items: [{ name: "a" }] } });
+    it("should notify the direct parent field listener when a child field changes", () => {
+        const form = new KertyForm<any>({ data: { parent: { text: "a" } } });
         const [count, listener] = counter();
-        form.addFieldListener("items", listener);
+        form.addFieldListener("parent", listener);
 
-        form.setFieldValue("items[0].name", "b");
+        form.setFieldValue("parent.text", "b");
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify a grandparent field listener when a deeply nested field changes", () => {
+        const form = new KertyForm<any>({ data: { parentRoot: { parent: { text: "a" } } } });
+        const [count, listener] = counter();
+        form.addFieldListener("parentRoot", listener);
+
+        form.setFieldValue("parentRoot.parent.text", "b");
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should notify the array item listener when a property of that item changes", () => {
+        const form = new KertyForm<any>({ data: { parent: [{ text: "a" }] } });
+        const [count, listener] = counter();
+        form.addFieldListener("parent[0]", listener);
+
+        form.setFieldValue("parent[0].text", "b");
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify the array listener when a property of one of its items changes", () => {
+        const form = new KertyForm<any>({ data: { parent: [{ text: "a" }] } });
+        const [count, listener] = counter();
+        form.addFieldListener("parent", listener);
+
+        form.setFieldValue("parent[0].text", "b");
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should notify the array listener when one of its items is assigned directly", () => {
+        const form = new KertyForm<any>({ data: { parent: [{ text: "a" }] } });
+        const [count, listener] = counter();
+        form.addFieldListener("parent", listener);
+
+        form.setFieldValue("parent[0]", { text: "b" });
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should notify the direct parent listener when an array operation changes a nested array", () => {
+        const form = new KertyForm<any>({ data: { rows: [{ tags: ["a"] }] } });
+        const [count, listener] = counter();
+        form.addFieldListener("rows[0]", listener);
+
+        form.appendItems("rows[0].tags", "b");
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should notify only the changed field when a root level field changes", () => {
+        const form = new KertyForm<any>({ data: { name: "a", other: "b" } });
+        const [changed, changedListener] = counter();
+        const [other, otherListener] = counter();
+        form.addFieldListener("name", changedListener);
+        form.addFieldListener("other", otherListener);
+
+        form.setFieldValue("name", "c");
+
+        expect([changed.calls, other.calls]).toEqual([1, 0]);
+    });
+
+    it("should not notify a listener whose field name merely shares a prefix with the changed field's parent", () => {
+        const form = new KertyForm<any>({ data: { name: 1, nameSuffix: { x: 1 } } });
+        const [count, listener] = counter();
+        form.addFieldListener("name", listener);
+
+        form.setFieldValue("nameSuffix.x", 2);
+
+        expect(count.calls).toBe(0);
+    });
+
+    it("should keep notifying later field listeners when an earlier listener is a non-boundary prefix of the changed field", () => {
+        const form = new KertyForm<any>({ data: { name: 1, nameSuffix: { x: 1 } } });
+        const [prefix, prefixListener] = counter();
+        const [target, targetListener] = counter();
+        form.addFieldListener("name", prefixListener);
+        form.addFieldListener("nameSuffix.x", targetListener);
+
+        form.setFieldValue("nameSuffix.x", 2);
+
+        expect([prefix.calls, target.calls]).toEqual([0, 1]);
+    });
+
+    it("should keep notifying a whole form listener when an earlier listener is a non-boundary prefix of the changed field", () => {
+        const form = new KertyForm<any>({ data: { name: 1, nameSuffix: { x: 1 } } });
+        const [prefix, prefixListener] = counter();
+        const [whole, wholeListener] = counter();
+        form.addFieldListener("name", prefixListener);
+        form.addListener(wholeListener, dataOnly);
+
+        form.setFieldValue("nameSuffix.x", 2);
+
+        expect([prefix.calls, whole.calls]).toEqual([0, 1]);
+    });
+
+    it("should keep notifying later field listeners when an earlier listener is a shorter unrelated field", () => {
+        const form = new KertyForm<any>({ data: { a: 1, parent: { text: "x" } } });
+        const [unrelated, unrelatedListener] = counter();
+        const [parent, parentListener] = counter();
+        const [child, childListener] = counter();
+        form.addFieldListener("a", unrelatedListener);
+        form.addFieldListener("parent", parentListener);
+        form.addFieldListener("parent.text", childListener);
+
+        form.setFieldValue("parent.text", "y");
+
+        expect([unrelated.calls, parent.calls, child.calls]).toEqual([0, 1, 1]);
+    });
+
+    it("should not notify the parent field listener when the child change is silent", () => {
+        const form = new KertyForm<any>({ data: { parent: { text: "a" } } });
+        const [count, listener] = counter();
+        form.addFieldListener("parent", listener);
+
+        form.setFieldValue("parent.text", "b", true);
 
         expect(count.calls).toBe(0);
     });

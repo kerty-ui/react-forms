@@ -81,7 +81,6 @@ export class KertyForm<TData> implements IKertyForm<TData> {
     #isMessageDrivenValidator: boolean = false;
     #validationResult?: IValidationResult;
     #ruleSet?: string | null;
-    #descendantFieldCount: number = 0;
 
     #fields = new Map<string, FieldInfo>();
     #dirtyFields = new Set<string>();
@@ -132,9 +131,6 @@ export class KertyForm<TData> implements IKertyForm<TData> {
     addFieldListener(name: FieldPath<TData>, listener: () => void) {
 
         const field = this.#getField(name as string);
-        if(field.listenerCount === 0){
-            this.#descendantFieldCount += 1;
-        }
 
         field.listenerCount += 1;
 
@@ -153,7 +149,6 @@ export class KertyForm<TData> implements IKertyForm<TData> {
 
             field.listenerCount -= 1;
             if(field.listenerCount === 0) {
-                this.#descendantFieldCount -= 1;
 
                 this.#fields.delete(name as string);
                 this.#invalidFields.delete(name as string);
@@ -1210,11 +1205,13 @@ export class KertyForm<TData> implements IKertyForm<TData> {
                 continue;
             }
 
-            if(listener.fieldName == null) {
+            const listenerFieldName = listener.fieldName;
+
+            if(listenerFieldName == null) {
                 continue;
             }
 
-            if (options.affectedFields.has(listener.fieldName)) {
+            if (options.affectedFields.has(listenerFieldName)) {
                 listener.notify();
                 continue;
             }
@@ -1223,14 +1220,33 @@ export class KertyForm<TData> implements IKertyForm<TData> {
                 continue;
             }
 
-            if(listener.fieldName === options.changedField) {
-                listener.notify();
-                continue;
-            }
+            const changedFieldNameLength = options.changedField.length;
+            const listenerFieldNameLength = listenerFieldName.length;
 
-            if(this.#descendantFieldCount > 0 && listener.fieldName.startsWith(options.changedField)) {
-                const next = listener.fieldName[options.changedField.length];
-                if(next === "." || next === "[") {
+            if(listenerFieldNameLength === changedFieldNameLength) {
+                if(listenerFieldName === options.changedField) {
+                    listener.notify();
+                }
+            }
+            else if(listenerFieldNameLength > changedFieldNameLength) {
+                if(listenerFieldName.startsWith(options.changedField)) {
+                    const next = listenerFieldName[changedFieldNameLength];
+                    if(next === "." || next === "[") {
+                        listener.notify();
+                    }
+                }
+            }
+            else if(options.changedField.startsWith(listenerFieldName)) {
+
+                const next = options.changedField[listenerFieldNameLength];
+                if(next !== "." && next !== "[") {
+                    continue;
+                }
+
+                const childIndex = listenerFieldNameLength + 1;
+
+                if(options.changedField.indexOf(".", childIndex) === -1
+                    && options.changedField.indexOf("[", childIndex) === -1) {
                     listener.notify();
                 }
             }

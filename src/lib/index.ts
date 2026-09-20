@@ -15,9 +15,10 @@ export * from "./hooks/useStateWatch";
 export * from "./hooks/useField";
 export * from "./hooks/useFieldState";
 export * from "./hooks/useFieldWatch";
-export * from "./hooks/useField";
+export * from "./hooks/useFieldValue";
 export * from "./hooks/useForm";
 export * from "./hooks/useFormWatch";
+export * from "./hooks/useFormValidationResult";
 
 export * from "./validation/validator";
 export * from "./validation/validations";
