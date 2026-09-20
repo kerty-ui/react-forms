@@ -1196,6 +1196,12 @@ export class KertyForm<TData> implements IKertyForm<TData> {
             return;
         }
 
+        const changedField = options.changedField;
+        const changedFieldNameLength = changedField == null ? -1 : changedField.length;
+        const parentFieldNameLength = changedField == null
+            ? -1
+            : Math.max(changedField.lastIndexOf("."), changedField.lastIndexOf("["));
+
         for(let listener of this.#listeners) {
             if((listener.listenDataChange && options.formDataChanged)
                 || (listener.listenStateChange && options.formStateChanged)
@@ -1216,38 +1222,28 @@ export class KertyForm<TData> implements IKertyForm<TData> {
                 continue;
             }
 
-            if(options.changedField == null) {
+            if(changedField == null) {
                 continue;
             }
 
-            const changedFieldNameLength = options.changedField.length;
             const listenerFieldNameLength = listenerFieldName.length;
 
             if(listenerFieldNameLength === changedFieldNameLength) {
-                if(listenerFieldName === options.changedField) {
+                if(listenerFieldName === changedField) {
+                    listener.notify();
+                }
+            }
+            else if(listenerFieldNameLength === parentFieldNameLength) {
+                if(changedField.startsWith(listenerFieldName)) {
                     listener.notify();
                 }
             }
             else if(listenerFieldNameLength > changedFieldNameLength) {
-                if(listenerFieldName.startsWith(options.changedField)) {
+                if(listenerFieldName.startsWith(changedField)) {
                     const next = listenerFieldName[changedFieldNameLength];
                     if(next === "." || next === "[") {
                         listener.notify();
                     }
-                }
-            }
-            else if(options.changedField.startsWith(listenerFieldName)) {
-
-                const next = options.changedField[listenerFieldNameLength];
-                if(next !== "." && next !== "[") {
-                    continue;
-                }
-
-                const childIndex = listenerFieldNameLength + 1;
-
-                if(options.changedField.indexOf(".", childIndex) === -1
-                    && options.changedField.indexOf("[", childIndex) === -1) {
-                    listener.notify();
                 }
             }
         }
