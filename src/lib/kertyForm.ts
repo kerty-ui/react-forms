@@ -62,7 +62,7 @@ const isExistingItemIndex = (index: number, length: number) =>
 
 export const defaultFormConfig = {
     dirtyCheckEnabled: true,
-    dirtyCheckEmptyStringAsNull: true,
+    dirtyCheckNullAsDefault: true,
     trackTouchOnValueChange: true,
     clearFormValidationResultsOnChange: true,
 } as Required<FormConfig>
@@ -70,7 +70,7 @@ export const defaultFormConfig = {
 export class KertyForm<TData> implements IKertyForm<TData> {
 
     #dirtyCheckEnabled: boolean = true;
-    #dirtyCheckEmptyStringAsNull: boolean = true;
+    #dirtyCheckNullAsDefault: boolean = true;
     #trackTouchOnValueChange: boolean = true;
     #clearFormValidationResultsOnChange: boolean = true;
 
@@ -103,8 +103,8 @@ export class KertyForm<TData> implements IKertyForm<TData> {
         if(config.dirtyCheckEnabled != null) {
             this.#dirtyCheckEnabled = config.dirtyCheckEnabled;
         }
-        if(config.dirtyCheckEmptyStringAsNull != null) {
-            this.#dirtyCheckEmptyStringAsNull = config.dirtyCheckEmptyStringAsNull;
+        if(config.dirtyCheckNullAsDefault != null) {
+            this.#dirtyCheckNullAsDefault = config.dirtyCheckNullAsDefault;
         }
         if(config.trackTouchOnValueChange != null) {
             this.#trackTouchOnValueChange = config.trackTouchOnValueChange;
@@ -1081,7 +1081,7 @@ export class KertyForm<TData> implements IKertyForm<TData> {
             const fieldIsDirty = !isEqual(
                 value,
                 getObjectValue(this.#initialData, field.path),
-                this.#dirtyCheckEmptyStringAsNull);
+                this.#dirtyCheckNullAsDefault);
 
             if(fieldIsDirty) {
                 this.#dirtyFields.add(name);

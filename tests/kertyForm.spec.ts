@@ -64,7 +64,7 @@ describe("KertyForm – configuration", () => {
     it("should enable every tracking option when the default config is used", () => {
         expect(defaultFormConfig).toEqual({
             dirtyCheckEnabled: true,
-            dirtyCheckEmptyStringAsNull: true,
+            dirtyCheckNullAsDefault: true,
             trackTouchOnValueChange: true,
             clearFormValidationResultsOnChange: true,
         });
@@ -276,7 +276,25 @@ describe("KertyForm – dirty tracking", () => {
     });
 
     it("should mark the form dirty when an empty string becomes null and the normalisation is disabled", () => {
-        const form = new KertyForm<any>({ data: { a: "" }, dirtyCheckEmptyStringAsNull: false });
+        const form = new KertyForm<any>({ data: { a: "" }, dirtyCheckNullAsDefault: false });
+        register(form, "a");
+
+        form.setFieldValue("a", null);
+
+        expect(form.getState().isDirty).toBe(true);
+    });
+
+    it("should not mark the form dirty when an empty array becomes null and the default config is used", () => {
+        const form = new KertyForm<any>({ data: { a: [] } });
+        register(form, "a");
+
+        form.setFieldValue("a", null);
+
+        expect(form.getState().isDirty).toBe(false);
+    });
+
+    it("should mark the form dirty when an empty array becomes null and the normalisation is disabled", () => {
+        const form = new KertyForm<any>({ data: { a: [] }, dirtyCheckNullAsDefault: false });
         register(form, "a");
 
         form.setFieldValue("a", null);

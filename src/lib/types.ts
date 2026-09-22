@@ -196,7 +196,7 @@ export type FormSnapshot<TData> = {
 
 export type FormConfig = {
     dirtyCheckEnabled?: boolean;
-    dirtyCheckEmptyStringAsNull?: boolean;
+    dirtyCheckNullAsDefault?: boolean;
     trackTouchOnValueChange?: boolean;
     clearFormValidationResultsOnChange?: boolean;
 }

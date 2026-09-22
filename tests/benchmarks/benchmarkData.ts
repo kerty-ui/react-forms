@@ -42,7 +42,7 @@ export const SIZES = {
  * `isEqual` benchmarks rely on.
  *
  * Empty strings / zeroes are sprinkled in on purpose: they exercise the
- * `treatEmptyStringAsNull` branch of `isEqual` and the falsy-value handling of
+ * `treatNullAsDefault` branch of `isEqual` and the falsy-value handling of
  * `getObjectValue`.
  */
 export const createBenchmarkData = (options?: BenchmarkDataOptions): BenchModel => {

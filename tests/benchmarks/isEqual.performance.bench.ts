@@ -613,12 +613,12 @@ describe("isEqual – stress tests", () => {
     });
 });
 
-// ─── treatEmptyStringAsNull ───────────────────────────────────────────────────
-// KertyForm passes this flag from `dirtyCheckEmptyStringAsNull` on every field
+// ─── treatNullAsDefault ───────────────────────────────────────────────────
+// KertyForm passes this flag from `dirtyCheckNullAsDefault` on every field
 // change, and it selects a completely separate implementation inside isEqual.
 // These groups compare the two branches on identical inputs.
 
-describe("isEqual – treatEmptyStringAsNull vs default (primitives)", () => {
+describe("isEqual – treatNullAsDefault vs default (primitives)", () => {
     bench("default – empty string vs null", () => {
         isEqual("", null);
     });
@@ -636,7 +636,7 @@ describe("isEqual – treatEmptyStringAsNull vs default (primitives)", () => {
     });
 });
 
-describe("isEqual – treatEmptyStringAsNull vs default (form data)", () => {
+describe("isEqual – treatNullAsDefault vs default (form data)", () => {
     // The benchmark data deliberately contains empty strings and zeroes, so the
     // normalizing branch has real work to do on every leaf.
     const data1 = createBenchmarkData(SIZES.small);
@@ -651,7 +651,7 @@ describe("isEqual – treatEmptyStringAsNull vs default (form data)", () => {
     });
 });
 
-describe("isEqual – treatEmptyStringAsNull (empty vs nullish leaves)", () => {
+describe("isEqual – treatNullAsDefault (empty vs nullish leaves)", () => {
     const withEmptyStrings = {
         firstName: "",
         lastName: "Doe",

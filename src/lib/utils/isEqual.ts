@@ -1,4 +1,4 @@
-﻿type ComparedPairs = WeakMap<object, WeakSet<object>>;
+type ComparedPairs = WeakMap<object, WeakSet<object>>;
 
 const isPairCompared = (compared: ComparedPairs, a: object, b: object): boolean =>
     compared.get(a)?.has(b) === true;
@@ -12,11 +12,21 @@ const markPairCompared = (compared: ComparedPairs, a: object, b: object): void =
     partners.add(b);
 };
 
-export const isEqual = (valueA: any, valueB: any, treatEmptyStringAsNull?: boolean, compared?: ComparedPairs): boolean => {
-    if (treatEmptyStringAsNull) {
+const toDefaultNormalized = (value: any): any => {
+    if (value === "") {
+        return null;
+    }
+    if (Array.isArray(value) && value.length === 0) {
+        return null;
+    }
+    return value;
+};
+
+export const isEqual = (valueA: any, valueB: any, treatNullAsDefault?: boolean, compared?: ComparedPairs): boolean => {
+    if (treatNullAsDefault) {
         return _isEqualNormalized(
-            valueA === "" ? null : valueA,
-            valueB === "" ? null : valueB,
+            toDefaultNormalized(valueA),
+            toDefaultNormalized(valueB),
             compared
         );
     }
@@ -55,8 +65,8 @@ const _isEqualNormalized = (a: any, b: any, compared: ComparedPairs | undefined)
     if (Array.isArray(a)) {
         if (!Array.isArray(b) || a.length !== b.length) return false;
         for (let i = 0; i < a.length; i++) {
-            const ai = a[i] === "" ? null : a[i];
-            const bi = b[i] === "" ? null : b[i];
+            const ai = toDefaultNormalized(a[i]);
+            const bi = toDefaultNormalized(b[i]);
             if (ai === bi) continue;
             if (!_isEqualNormalized(ai, bi, compared)) return false;
         }
@@ -79,8 +89,8 @@ const _isEqualNormalized = (a: any, b: any, compared: ComparedPairs | undefined)
         if (key !== keysB[i]){
             return false;
         }
-        const va = a[key] === "" ? null : a[key];
-        const vb = b[key] === "" ? null : b[key];
+        const va = toDefaultNormalized(a[key]);
+        const vb = toDefaultNormalized(b[key]);
         if (va === vb) {
             continue;
         }

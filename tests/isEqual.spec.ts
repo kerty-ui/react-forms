@@ -459,6 +459,16 @@ describe("isEqual", () => {
             expect(isEqual({ p: shared, q: shared }, { p: { x: 1 }, q: { x: 1 } }, true)).toBe(true);
         });
 
+        it("should handle a self reference when empty arrays are normalized", () => {
+            const obj1: any = { a: [] };
+            obj1.self = obj1;
+
+            const obj2: any = { a: null };
+            obj2.self = obj2;
+
+            expect(isEqual(obj1, obj2, true)).toBe(true);
+        });
+
         it("should handle mutually circular references", () => {
             const obj1: any = { a: 1 };
             const obj1b: any = { b: 2 };
@@ -515,6 +525,71 @@ describe("isEqual", () => {
 
             expect(isEqual(arr1, arr2)).toBe(true);
             expect(isEqual(arr1, arr3)).toBe(false);
+        });
+    });
+
+    describe("treatNullAsDefault", () => {
+        it("should treat an empty string as equal to null at the top level", () => {
+            expect(isEqual("", null, true)).toBe(true);
+            expect(isEqual(null, "", true)).toBe(true);
+        });
+
+        it("should treat an empty array as equal to null at the top level", () => {
+            expect(isEqual([], null, true)).toBe(true);
+            expect(isEqual(null, [], true)).toBe(true);
+        });
+
+        it("should treat an empty array as equal to undefined at the top level", () => {
+            expect(isEqual([], undefined, true)).toBe(true);
+            expect(isEqual(undefined, [], true)).toBe(true);
+        });
+
+        it("should treat an empty array as equal to null or undefined within object properties", () => {
+            expect(isEqual({ a: [] }, { a: null }, true)).toBe(true);
+            expect(isEqual({ a: [] }, { a: undefined }, true)).toBe(true);
+            expect(isEqual({ a: null }, { a: [] }, true)).toBe(true);
+            expect(isEqual({ a: undefined }, { a: [] }, true)).toBe(true);
+        });
+
+        it("should treat an empty array as equal to null or undefined within array items", () => {
+            expect(isEqual([[], "b"], [null, "b"], true)).toBe(true);
+            expect(isEqual([[], "b"], [undefined, "b"], true)).toBe(true);
+        });
+
+        it("should not treat an empty array as equal to null or undefined when the flag is not set", () => {
+            expect(isEqual([], null)).toBe(false);
+            expect(isEqual([], undefined)).toBe(false);
+        });
+
+        it("should not treat a non-empty array as equal to null", () => {
+            expect(isEqual([1], null, true)).toBe(false);
+        });
+
+        it("should not normalize empty string or empty array when the flag is not set", () => {
+            expect(isEqual("", null)).toBe(false);
+            expect(isEqual([], null)).toBe(false);
+        });
+
+        it("should treat an empty string as equal to null within object properties", () => {
+            expect(isEqual({ a: "" }, { a: null }, true)).toBe(true);
+            expect(isEqual({ a: "" }, { a: undefined }, true)).toBe(true);
+        });
+
+        it("should treat an empty string as equal to null within array items", () => {
+            expect(isEqual(["", "b"], [null, "b"], true)).toBe(true);
+        });
+
+        it("should still detect real differences alongside normalized values", () => {
+            expect(isEqual({ a: "", b: 1 }, { a: null, b: 2 }, true)).toBe(false);
+            expect(isEqual({ a: [], b: [1] }, { a: null, b: [2] }, true)).toBe(false);
+        });
+
+        it("should treat nested empty arrays as equal to null", () => {
+            expect(isEqual(
+                { items: [], tags: [] },
+                { items: null, tags: null },
+                true
+            )).toBe(true);
         });
     });
 
