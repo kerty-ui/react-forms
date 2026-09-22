@@ -153,7 +153,7 @@ export class Validator<TData = any> implements IValidator<TData> {
 
                                 const itemFieldName = `${ctx.fieldName}[${index}]`;
 
-                                if(!runsForAnyChange && itemFieldName !== changedFieldName) {
+                                if(!runsForAnyChange && !itemFieldName.startsWith(changedFieldName)) {
                                     continue;
                                 }
 
@@ -229,8 +229,8 @@ export class Validator<TData = any> implements IValidator<TData> {
                         || validation.hasDependency
                         || validation.hasCondition;
 
-                    const isTheChangedField = changedFieldPattern === propPattern
-                        && propValidationContext.fieldName === changedFieldName;
+                    const isTheChangedField = changedFieldName != null
+                        && propValidationContext.fieldName.startsWith(changedFieldName);
 
                     if(runsForAnyChange || isTheChangedField) {
                         const validationResult = this.#runValidations(ruleSet, propValidationContext, validation.validations);

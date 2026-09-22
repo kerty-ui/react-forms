@@ -144,6 +144,26 @@ export class KertyForm<TData> implements IKertyForm<TData> {
         } as FormListener;
         this.#listeners.add(entry);
 
+        if(this.#state.isValidated && field.listenerCount === 1) {
+
+            const listenerOptions = {
+                affectedFields: new Set<string>(),
+            } as NotifyListenerOptions
+
+            this.#validateField(name, listenerOptions);
+
+            const formIsValid = this.#isFormValid();
+            if(this.#state.isValid !== formIsValid) {
+                this.#state = {
+                    ...this.#state,
+                    isValid: formIsValid,
+                };
+                listenerOptions.formStateChanged = true;
+            }
+
+            this.#notifyListeners(listenerOptions);
+        }
+
         return () => {
             this.#listeners.delete(entry);
 
@@ -276,10 +296,6 @@ export class KertyForm<TData> implements IKertyForm<TData> {
     touch(name?: FieldPath<TData>) {
 
         const listenerOptions = {
-            formDataChanged: undefined,
-            formStateChanged: undefined,
-            formValidationChanged: undefined,
-            fieldValidationChanged: undefined,
             affectedFields: new Set<string>()
         } as NotifyListenerOptions;
 
@@ -350,10 +366,6 @@ export class KertyForm<TData> implements IKertyForm<TData> {
         this.#invalidFields.clear();
 
         const listenerOptions = {
-            formDataChanged: undefined,
-            formStateChanged: undefined,
-            formValidationChanged: undefined,
-            fieldValidationChanged: undefined,
             affectedFields: new Set<string>()
         } as NotifyListenerOptions;
 
@@ -909,6 +921,31 @@ export class KertyForm<TData> implements IKertyForm<TData> {
             return;
         }
 
+        const clearFields = [];
+        if(arrayValue.length === 0) {
+            clearFields.push(name as string);
+        }
+        else {
+            for (const i of (Array.isArray(index) ? index : [index])) {
+                clearFields.push(`${name}[${i}]`);
+            }
+        }
+
+        if(clearFields.length > 0) {
+            clearFields.forEach((fieldName) => {
+                for (const [key, field] of this.#fields) {
+                    if (key.startsWith(fieldName)) {
+                        field.validationResult = undefined;
+                    }
+                }
+                for (const field of this.#invalidFields) {
+                    if (field.startsWith(fieldName)) {
+                        this.#invalidFields.delete(field);
+                    }
+                }
+            });
+        }
+
         this.#onFieldChange(name as string, field, arrayValue);
     }
 
@@ -1115,38 +1152,7 @@ export class KertyForm<TData> implements IKertyForm<TData> {
                     this.#invalidFields.delete(name);
                 }
 
-                const validationResults = this.#validator.validate({
-                    fieldName: name,
-                    data: this.#data,
-                    ruleSet: this.#ruleSet,
-                });
-
-                for (let [fieldName, validationResult] of validationResults) {
-                    const validatedField = this.#getField(fieldName);
-                    if(validationResult.messages.length > 0) {
-                        validatedField.validationResult = validationResult;
-                        listenerOptions.fieldValidationChanged = true;
-                    }
-                    else if(validatedField.validationResult != null) {
-                        validatedField.validationResult = undefined;
-                        listenerOptions.fieldValidationChanged = true;
-                    }
-
-                    const validatedFieldIsValid = !validationResult.has(Severity.Error);
-                    if (validatedFieldIsValid) {
-                        this.#invalidFields.delete(fieldName);
-                    }
-                    else {
-                        this.#invalidFields.add(fieldName);
-                    }
-
-                    validatedField.state = {
-                        ...validatedField.state,
-                        isValid: validatedFieldIsValid,
-                        isValidated: true,
-                    }
-                    listenerOptions.affectedFields.add(fieldName);
-                }
+                this.#validateField(name, listenerOptions);
             }
         }
         else if(field.state.isValidated) {
@@ -1183,6 +1189,47 @@ export class KertyForm<TData> implements IKertyForm<TData> {
         }
 
         this.#notifyListeners(listenerOptions);
+    }
+
+    #validateField(name: string, listenerOptions: NotifyListenerOptions) {
+
+        if(this.#validator == null) {
+            return;
+        }
+
+        const validationResults = this.#validator?.validate({
+            fieldName: name,
+            data: this.#data,
+            ruleSet: this.#ruleSet,
+        });
+
+        for (let [fieldName, validationResult] of validationResults) {
+            const validatedField = this.#getField(fieldName);
+            if(validationResult.messages.length > 0) {
+                validatedField.validationResult = validationResult;
+                listenerOptions.fieldValidationChanged = true;
+            }
+            else if(validatedField.validationResult != null) {
+                validatedField.validationResult = undefined;
+                listenerOptions.fieldValidationChanged = true;
+            }
+
+            const validatedFieldIsValid = !validationResult.has(Severity.Error);
+            if (validatedFieldIsValid) {
+                this.#invalidFields.delete(fieldName);
+            }
+            else {
+                this.#invalidFields.add(fieldName);
+            }
+
+            validatedField.state = {
+                ...validatedField.state,
+                isValid: validatedFieldIsValid,
+                isValidated: true,
+            }
+            listenerOptions.affectedFields.add(fieldName);
+        }
+
     }
 
     #notifyListeners(options: NotifyListenerOptions) {
