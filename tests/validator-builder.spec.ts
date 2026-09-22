@@ -475,14 +475,14 @@ describe("ValidatorBuilder – scoped to a changed field", () => {
         expect(firstTextFor(result, "confirmPassword")).toBe("Passwords must match");
     });
 
-    it("should revalidate every item when the rule targets primitive array items", () => {
+    it("should revalidate only the changed item when the rule targets primitive array items", () => {
         const validator = new ValidatorBuilder<ArrayModel>()
             .setup((b) => b.validationFor("tags[]").add({ check: isTextEmpty, message: "Tag is required" }))
             .build();
 
         const result = validator.validate({ data: { tags: ["", "b"], items: [] }, fieldName: "tags[1]" });
 
-        expect([...result.keys()]).toEqual(["tags[0]", "tags[1]"]);
+        expect([...result.keys()]).toEqual(["tags[1]"]);
     });
 
     it("should revalidate the item field when the item rule was registered first", () => {

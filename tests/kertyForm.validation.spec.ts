@@ -11,7 +11,9 @@ type LoginForm = {
     password: string;
 };
 
-const isTextEmpty = (ctx: any) => Validations.IsTextEmpty(ctx.value);
+const isTextEmpty = (ctx: any) => {
+    return Validations.IsTextEmpty(ctx.value);
+}
 
 /** A fieldDriven validator requiring both login fields. */
 const requiredLoginValidator = () => new Validator<Partial<LoginForm>>({
@@ -355,6 +357,136 @@ describe("KertyForm – fieldDriven revalidation of array item fields", () => {
         form.setFieldValue("items[0].name", "John");
 
         form.setFieldValue("items[0].name", "");
+
+        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+    });
+});
+
+// ─── on-change revalidation after array mutations ────────────────────────────
+
+/*
+ * Intended behaviour - these currently FAIL. An array mutation reports the array
+ * itself as the changed field - `items` - which matches no item rule, so nothing
+ * under it is revalidated and the results stay keyed to the old indexes.
+ * See #validateInternal in src/lib/validation/validator.ts.
+ */
+describe("KertyForm – fieldDriven revalidation after an array mutation", () => {
+    const gridForm = (items: { name: string }[]) => {
+        const form = new KertyForm<any>({
+            data: { items },
+            validator: new Validator<any>({
+                items: [{ _name: new FieldValidations({ check: isTextEmpty, message: "Name is required" }) }],
+            }),
+        });
+        items.forEach((_, index) => form.addFieldListener(`items[${index}].name`, () => { }));
+        return form;
+    };
+
+    it("should report the message for an appended failing item when the form was already validated", () => {
+        const form = gridForm([{ name: "John" }]);
+        form.validate();
+
+        form.appendItems("items", { name: "" });
+
+        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("Name is required");
+    });
+
+    it("should make the form invalid when an appended item fails a rule", () => {
+        const form = gridForm([{ name: "John" }]);
+        form.validate();
+
+        form.appendItems("items", { name: "" });
+
+        expect(form.getState().isValid).toBe(false);
+    });
+
+    it("should report the message for the appended failing item when the whole form is validated again", () => {
+        const form = gridForm([{ name: "John" }]);
+        form.validate();
+        form.appendItems("items", { name: "" });
+
+        form.validate();
+
+        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("Name is required");
+    });
+
+    it("should clear the message of the first item when a valid item is prepended before the failing one", () => {
+        const form = gridForm([{ name: "" }]);
+        form.validate();
+
+        form.prependItems("items", { name: "John" });
+
+        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+    });
+
+    it("should report the message at the new index of the failing item when a valid item is prepended", () => {
+        const form = gridForm([{ name: "" }]);
+        form.validate();
+
+        form.prependItems("items", { name: "John" });
+
+        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("Name is required");
+    });
+
+    it("should report the message at the new index of the failing item when two items are swapped", () => {
+        const form = gridForm([{ name: "John" }, { name: "" }]);
+        form.validate();
+
+        form.swapItem("items", 0, 1);
+
+        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+    });
+
+    it("should clear the message of the swapped-away index when two items are swapped", () => {
+        const form = gridForm([{ name: "John" }, { name: "" }]);
+        form.validate();
+
+        form.swapItem("items", 0, 1);
+
+        expect(form.getFieldValidationMessage("items[1].name")).toBeUndefined();
+    });
+
+    it("should clear the message of the removed item when the only failing item is removed", () => {
+        const form = gridForm([{ name: "" }]);
+        form.validate();
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+    });
+
+    it("should make the form valid when the only failing item is removed", () => {
+        const form = gridForm([{ name: "" }]);
+        form.validate();
+
+        form.removeItems("items", 0);
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it("should clear the message of the last index when the last item is removed while an earlier item still fails", () => {
+        const form = gridForm([{ name: "" }, { name: "" }]);
+        form.validate();
+
+        form.removeItems("items", 1);
+
+        expect(form.getFieldValidationMessage("items[1].name")).toBeUndefined();
+    });
+
+    it("should keep the message of the remaining failing item when the last item is removed", () => {
+        const form = gridForm([{ name: "" }, { name: "" }]);
+        form.validate();
+
+        form.removeItems("items", 1);
+
+        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+    });
+
+    it("should report the message when an existing item is replaced by a failing one", () => {
+        const form = gridForm([{ name: "John" }]);
+        form.validate();
+
+        form.updateItem("items", 0, { name: "" });
 
         expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
     });

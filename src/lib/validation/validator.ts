@@ -93,6 +93,7 @@ export class Validator<TData = any> implements IValidator<TData> {
             ctx.fieldName != null
                 ? ctx.fieldName.replace(/\[.*?]/g, '[]')
                 : undefined,
+            ctx.fieldName,
             ctx.ruleSet,
             {
                 data: ctx.data,
@@ -108,55 +109,63 @@ export class Validator<TData = any> implements IValidator<TData> {
     }
 
     #validateInternal (
-        fieldName: string | undefined,
+        changedFieldPattern: string | undefined,
+        changedFieldName: string | null | undefined,
         ruleSet: string | null | undefined,
-        ctx: ValidationContext<TData, any>,
-        validations: RawValidationsSchema | RawValidationsSchemaArray,
+        rootCtx: ValidationContext<TData, any>,
+        rootValidations: RawValidationsSchema | RawValidationsSchemaArray,
         validationsResult: Map<string, ValidationResult>
     ) {
 
+        const isFullDataValidation = changedFieldName == null;
+
         const stack: Array<{
             ctx: ValidationContext<TData, any>;
-            path: string;
+            pattern: string;
             validations: RawValidationsSchema | RawValidationsSchemaArray;
-        }> = [{ ctx, path: "", validations }];
+        }> = [{ ctx: rootCtx, pattern: "", validations: rootValidations }];
 
         while (stack.length > 0) {
-            const frame = stack.pop();
+            const { ctx, pattern, validations } = stack.pop()!;
 
-            if (frame == null) {
+            if (validations == null) {
                 continue;
             }
 
-            const currentCtx = frame.ctx;
-            const currentPath = frame.path;
-            const currentValidations = frame.validations;
+            if (Array.isArray(validations)) {
 
-            if (currentCtx.value == null || currentValidations == null) {
-                continue;
-            }
+                if (!Array.isArray(ctx.value)) {
+                    continue;
+                }
 
-            if (Array.isArray(currentValidations)) {
-                const itemPath = `${currentPath}[]`;
-                for(let vIndex = 0; vIndex < currentValidations.length; vIndex++) {
-                    const childValidation = currentValidations[vIndex];
+                const itemPattern = `${pattern}[]`;
+                for(let vIndex = 0; vIndex < validations.length; vIndex++) {
+                    const childValidation = validations[vIndex];
                     if(childValidation instanceof FieldValidations)
                     {
-                        if(fieldName == null
+                        const runsForAnyChange = isFullDataValidation
                             || childValidation.hasDependency
-                            || childValidation.hasCondition
-                            || fieldName === itemPath) {
+                            || childValidation.hasCondition;
 
-                            for (let index = 0; index < currentCtx.value.length; index++) {
+                        if(runsForAnyChange || changedFieldPattern === itemPattern) {
+
+                            for (let index = 0; index < ctx.value.length; index++) {
+
+                                const itemFieldName = `${ctx.fieldName}[${index}]`;
+
+                                if(!runsForAnyChange && itemFieldName !== changedFieldName) {
+                                    continue;
+                                }
+
                                 const itemValidationContext = {
-                                    data: currentCtx.data,
-                                    parent: currentCtx.parent,
-                                    value: currentCtx.value[index],
-                                    fieldName: `${currentCtx.fieldName}[${index}]`,
+                                    data: ctx.data,
+                                    parent: ctx.parent,
+                                    value: ctx.value[index],
+                                    fieldName: itemFieldName,
                                 } as ValidationContext<TData, any>;
                                 const itemValidationResult = this.#runValidations(ruleSet, itemValidationContext, childValidation.validations);
-                                if(itemValidationResult.messages.length > 0 || fieldName != null) {
-                                    validationsResult.set(`${currentCtx.fieldName}[${index}]`, itemValidationResult);
+                                if(itemValidationResult.messages.length > 0 || changedFieldPattern != null) {
+                                    validationsResult.set(itemFieldName, itemValidationResult);
                                 }
                             }
                         }
@@ -165,19 +174,15 @@ export class Validator<TData = any> implements IValidator<TData> {
                     }
 
                     if (Array.isArray(childValidation)) {
-                        if (!Array.isArray(currentCtx.value)) {
-                            continue;
-                        }
-
-                        for (let index = 0; index < currentCtx.value.length; index++) {
+                        for (let index = 0; index < ctx.value.length; index++) {
                             stack.push({
                                 ctx: {
-                                    data: currentCtx.data,
-                                    parent: currentCtx.parent,
-                                    value: currentCtx.value[index],
-                                    fieldName: `${currentCtx.fieldName}[${index}]`,
+                                    data: ctx.data,
+                                    parent: ctx.parent,
+                                    value: ctx.value[index],
+                                    fieldName: `${ctx.fieldName}[${index}]`,
                                 },
-                                path: itemPath,
+                                pattern: itemPattern,
                                 validations: childValidation,
                             });
                         }
@@ -185,15 +190,15 @@ export class Validator<TData = any> implements IValidator<TData> {
                         continue;
                     }
 
-                    for (let index = currentCtx.value.length - 1; index >= 0; index--) {
+                    for (let index = ctx.value.length - 1; index >= 0; index--) {
                         stack.push({
                             ctx: {
-                                data: currentCtx.data,
-                                parent: currentCtx.parent,
-                                value: currentCtx.value[index],
-                                fieldName: `${currentCtx.fieldName}[${index}].`,
+                                data: ctx.data,
+                                parent: ctx.parent,
+                                value: ctx.value[index],
+                                fieldName: `${ctx.fieldName}[${index}].`,
                             },
-                            path: `${itemPath}.`,
+                            pattern: `${itemPattern}.`,
                             validations: childValidation,
                         });
                     }
@@ -202,51 +207,54 @@ export class Validator<TData = any> implements IValidator<TData> {
                 continue;
             }
 
-            for (const name in currentValidations) {
-                const validation = currentValidations[name];
+            for (const name in validations) {
+                const validation = validations[name];
 
-                let propName = name;
-                if (name.startsWith("_")) {
-                    propName = name.slice(1);
-                }
+                const propName = name.startsWith("_")
+                    ? name.slice(1)
+                    : name;
 
-                const validationContext = {
-                    data: currentCtx.data,
-                    parent: currentCtx.value,
-                    value: currentCtx.value[propName],
-                    fieldName: currentCtx.fieldName + propName,
+                const propValidationContext = {
+                    data: ctx.data,
+                    parent: ctx.value,
+                    value: ctx.value?.[propName],
+                    fieldName: ctx.fieldName + propName,
                 } as ValidationContext<TData, any>;
 
-                const propPath = currentPath + propName;
+                const propPattern = pattern + propName;
 
                 if (validation instanceof FieldValidations) {
 
-                    if(fieldName == null
+                    const runsForAnyChange = isFullDataValidation
                         || validation.hasDependency
-                        || validation.hasCondition
-                        || fieldName === propPath) {
-                        const validationResult = this.#runValidations(ruleSet, validationContext, validation.validations);
-                        if(validationResult.messages.length > 0 || fieldName != null) {
-                            validationsResult.set(validationContext.fieldName, validationResult);
+                        || validation.hasCondition;
+
+                    const isTheChangedField = changedFieldPattern === propPattern
+                        && propValidationContext.fieldName === changedFieldName;
+
+                    if(runsForAnyChange || isTheChangedField) {
+                        const validationResult = this.#runValidations(ruleSet, propValidationContext, validation.validations);
+                        if(validationResult.messages.length > 0 || changedFieldPattern != null) {
+                            validationsResult.set(propValidationContext.fieldName, validationResult);
                         }
                     }
                     continue;
                 }
 
-                if (Array.isArray(validation) && Array.isArray(validationContext.value)) {
+                if (Array.isArray(validation) && Array.isArray(propValidationContext.value)) {
                     stack.push({
-                        ctx: validationContext,
-                        path: propPath,
+                        ctx: propValidationContext,
+                        pattern: propPattern,
                         validations: validation,
                     });
                 }
                 else {
                     stack.push({
                         ctx: {
-                            ...validationContext,
-                            fieldName: validationContext.fieldName + ".",
+                            ...propValidationContext,
+                            fieldName: propValidationContext.fieldName + ".",
                         },
-                        path: `${propPath}.`,
+                        pattern: `${propPattern}.`,
                         validations: validation,
                     });
                 }

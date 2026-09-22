@@ -63,7 +63,7 @@ describe("Validator.validate – full form", () => {
         expect([...result.keys()].sort()).toEqual(["name", "surname"]);
     });
 
-    it("should skip a whole nested branch when its parent value is null", () => {
+    it("should run a nested branch rule when its parent value is null", () => {
         const validator = new Validator<any>({
             person: {
                 _name: new FieldValidations(required("Name is required")),
@@ -72,7 +72,33 @@ describe("Validator.validate – full form", () => {
 
         const result = validator.validate({ data: { person: null } });
 
-        expect(result.size).toBe(0);
+        expect(firstTextFor(result, "person.name")).toBe("Name is required");
+    });
+
+    it("should run a nested branch rule when its parent is absent from the data", () => {
+        const validator = new Validator<any>({
+            person: {
+                _name: new FieldValidations(required("Name is required")),
+            },
+        });
+
+        const result = validator.validate({ data: {} });
+
+        expect(firstTextFor(result, "person.name")).toBe("Name is required");
+    });
+
+    it("should run a deeply nested rule when an intermediate object is missing", () => {
+        const validator = new Validator<any>({
+            person: {
+                address: {
+                    _city: new FieldValidations(required("City is required")),
+                },
+            },
+        });
+
+        const result = validator.validate({ data: {} });
+
+        expect(firstTextFor(result, "person.address.city")).toBe("City is required");
     });
 
     it("should skip array item rules when the value is not an array", () => {
@@ -81,6 +107,30 @@ describe("Validator.validate – full form", () => {
         });
 
         const result = validator.validate({ data: { items: { value: "value" } } });
+
+        expect(result.size).toBe(0);
+    });
+
+    it("should skip array item rules when the array is absent from the data", () => {
+        const validator = new Validator<any>({
+            items: [new FieldValidations({ check: () => true, message: "item is invalid" })],
+        });
+
+        const result = validator.validate({ data: {} });
+
+        expect(result.size).toBe(0);
+    });
+
+    it("should skip nested array item rules when the array is absent from the data", () => {
+        const validator = new Validator<any>({
+            items: [
+                {
+                    _name: new FieldValidations(required("Name is required")),
+                },
+            ],
+        });
+
+        const result = validator.validate({ data: {} });
 
         expect(result.size).toBe(0);
     });
@@ -102,6 +152,23 @@ describe("Validator – validation context", () => {
         validator.validate({ data });
 
         expect(captured).toMatchObject({ data, parent: data, value: "root", fieldName: "value" });
+    });
+
+    it("should expose an undefined value and parent when the owning object is missing", () => {
+        let captured: any;
+        const validator = new Validator<any>({
+            person: {
+                _name: new FieldValidations({
+                    check: (ctx) => { captured = ctx; return false; },
+                    message: "never",
+                }),
+            },
+        });
+
+        validator.validate({ data: {} });
+
+        expect(captured).toMatchObject({ value: undefined, fieldName: "person.name" });
+        expect(captured.parent).toBeUndefined();
     });
 
     it("should expose the owning object as parent when the field is nested", () => {
@@ -366,6 +433,18 @@ describe("Validator.validate – scoped to a changed field", () => {
         expect(firstTextFor(result, "name")).toBe("Name is required");
     });
 
+    it("should validate a nested changed field when its owning object is missing", () => {
+        const validator = new Validator<any>({
+            bank: {
+                _iban: new FieldValidations(required("IBAN is required")),
+            },
+        });
+
+        const result = validator.validate({ data: {}, fieldName: "bank.iban" });
+
+        expect(firstTextFor(result, "bank.iban")).toBe("IBAN is required");
+    });
+
     it("should skip unrelated fields when a field name is given", () => {
         const validator = new Validator<{ name: string; surname: string }>({
             _name: new FieldValidations(required("Name is required")),
@@ -423,9 +502,37 @@ describe("Validator.validate – scoped to a changed field", () => {
         expect(textsFor(result, "name")).toEqual([]);
     });
 
-    it("should revalidate every item when a rule is registered on the array itself", () => {
+    it("should revalidate only the changed item when a rule is registered on the array itself", () => {
         const validator = new Validator<any>({
             items: [new FieldValidations(required("Item is required"))],
+        });
+
+        const result = validator.validate({ data: { items: ["", "b", ""] }, fieldName: "items[1]" });
+
+        expect([...result.keys()]).toEqual(["items[1]"]);
+    });
+
+    it("should revalidate every item when the array rule carries a when condition", () => {
+        const validator = new Validator<any>({
+            items: [new FieldValidations({
+                when: () => true,
+                check: (ctx: any) => Validations.IsTextEmpty(ctx.value),
+                message: "Item is required",
+            })],
+        });
+
+        const result = validator.validate({ data: { items: ["", "b", ""] }, fieldName: "items[1]" });
+
+        expect([...result.keys()]).toEqual(["items[0]", "items[1]", "items[2]"]);
+    });
+
+    it("should revalidate every item when the array rule is marked hasDependency", () => {
+        const validator = new Validator<any>({
+            items: [new FieldValidations({
+                check: (ctx: any) => Validations.IsTextEmpty(ctx.value),
+                message: "Item is required",
+                hasDependency: true,
+            })],
         });
 
         const result = validator.validate({ data: { items: ["", "b", ""] }, fieldName: "items[1]" });
@@ -446,9 +553,28 @@ describe("Validator.validate – scoped to a changed field", () => {
         expect(textsFor(result, "items[0].name")).toEqual(["Name is required"]);
     });
 
-    it("should revalidate the item field at every index when one item field changes", () => {
+    it("should revalidate the changed item field only when one item field changes", () => {
         const validator = new Validator<any>({
             items: [{ _name: new FieldValidations(required("Name is required")) }],
+        });
+
+        const result = validator.validate({
+            data: { items: [{ name: "a" }, { name: "b" }] },
+            fieldName: "items[1].name",
+        });
+
+        expect([...result.keys()]).toEqual(["items[1].name"]);
+    });
+
+    it("should revalidate the item field at every index when it carries a when condition", () => {
+        const validator = new Validator<any>({
+            items: [{
+                _name: new FieldValidations({
+                    when: () => true,
+                    check: (ctx: any) => Validations.IsTextEmpty(ctx.value),
+                    message: "Name is required",
+                }),
+            }],
         });
 
         const result = validator.validate({
