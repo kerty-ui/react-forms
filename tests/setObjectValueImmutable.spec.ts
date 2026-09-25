@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import { setObjectValueImmutable } from "../src/lib/utils/setObjectValueImmutable";
 import { getFieldPath } from "../src/lib/utils/getFieldPath";
 
-const set = <T,>(data: any, name: string, value: T) =>
-    setObjectValueImmutable(data, getFieldPath(name), value);
-
-// ─── guards ──────────────────────────────────────────────────────────────────
+const set = <T,>(data: any, name: string, value: T) => setObjectValueImmutable(data, getFieldPath(name), value);
 
 describe("setObjectValueImmutable – guards", () => {
     it("should return the input unchanged when data is null", () => {
@@ -28,8 +25,6 @@ describe("setObjectValueImmutable – guards", () => {
         expect(result).toBe(data);
     });
 });
-
-// ─── flat properties ─────────────────────────────────────────────────────────
 
 describe("setObjectValueImmutable – flat properties", () => {
     it("should return a new root object when a property is set", () => {
@@ -73,8 +68,6 @@ describe("setObjectValueImmutable – flat properties", () => {
         expect(result.address).toBe(address);
     });
 });
-
-// ─── nested objects ──────────────────────────────────────────────────────────
 
 describe("setObjectValueImmutable – nested objects", () => {
     it("should clone every object along the path when a nested property is set", () => {
@@ -120,8 +113,6 @@ describe("setObjectValueImmutable – nested objects", () => {
         expect(result.other).toBe(other);
     });
 });
-
-// ─── arrays ──────────────────────────────────────────────────────────────────
 
 describe("setObjectValueImmutable – arrays", () => {
     it("should clone the array when an item is set by index", () => {

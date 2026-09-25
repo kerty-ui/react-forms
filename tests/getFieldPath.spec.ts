@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getFieldPath } from "../src/lib/utils/getFieldPath";
-import type { FieldPathPart } from "../src/lib/types";
+import { type FieldPathPart } from "../src/lib";
 
 const expectPath = (fieldName: string, expected: FieldPathPart[]) => {
     const result = getFieldPath(fieldName);

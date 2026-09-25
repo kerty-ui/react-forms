@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KertyForm } from "../src/lib/kertyForm";
+import { KertyForm } from "../src/lib";
 
 type ListForm = {
     items: string[];
@@ -11,8 +11,6 @@ const counter = () => {
     const state = { calls: 0 };
     return [state, () => { state.calls++; }] as const;
 };
-
-// ─── appendItems ─────────────────────────────────────────────────────────────
 
 describe("KertyForm.appendItems", () => {
     it("should add the item at the end when a single value is given", () => {
@@ -94,8 +92,6 @@ describe("KertyForm.appendItems", () => {
     });
 });
 
-// ─── prependItems ────────────────────────────────────────────────────────────
-
 describe("KertyForm.prependItems", () => {
     it("should add the item at the front when a single value is given", () => {
         const form = listForm();
@@ -174,8 +170,6 @@ describe("KertyForm.prependItems", () => {
     });
 });
 
-// ─── insertItems ─────────────────────────────────────────────────────────────
-
 describe("KertyForm.insertItems", () => {
     it("should place the item at the given index when a single value is given", () => {
         const form = listForm();
@@ -226,8 +220,6 @@ describe("KertyForm.insertItems", () => {
     });
 });
 
-// ─── removeItems ─────────────────────────────────────────────────────────────
-
 describe("KertyForm.removeItems", () => {
     it("should drop the item at the given index when a single index is given", () => {
         const form = listForm();
@@ -271,8 +263,6 @@ describe("KertyForm.removeItems", () => {
         expect(count.calls).toBe(1);
     });
 });
-
-// ─── swapItem ────────────────────────────────────────────────────────────────
 
 describe("KertyForm.swapItem", () => {
     it("should exchange the two items when valid indices are given", () => {
@@ -370,8 +360,6 @@ describe("KertyForm.swapItem", () => {
     });
 });
 
-// ─── moveItem ────────────────────────────────────────────────────────────────
-
 describe("KertyForm.moveItem", () => {
     it("should shift the item forward when moved to a later index", () => {
         const form = listForm();
@@ -456,8 +444,6 @@ describe("KertyForm.moveItem", () => {
     });
 });
 
-// ─── updateItem ──────────────────────────────────────────────────────────────
-
 describe("KertyForm.updateItem", () => {
     it("should replace the item at the given index when called", () => {
         const form = listForm();
@@ -532,8 +518,6 @@ describe("KertyForm.updateItem", () => {
         expect(count.calls).toBe(0);
     });
 });
-
-// ─── array state tracking ────────────────────────────────────────────────────
 
 describe("KertyForm – array state tracking", () => {
     it("should mark the form dirty when an item is appended", () => {

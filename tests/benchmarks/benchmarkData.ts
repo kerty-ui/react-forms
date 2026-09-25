@@ -25,26 +25,12 @@ export type BenchmarkDataOptions = {
     linesPerOrder?: number;
 };
 
-/**
- * Shared size presets so every benchmark file talks about the same "small",
- * "medium" and "large" shapes. `MEDIUM` is also the default of
- * `createBenchmarkData`, so it doubles as the baseline data set.
- */
 export const SIZES = {
     small:  { contacts: 2,   tagsPerContact: 2,  orders: 5,   linesPerOrder: 2 },
     medium: { contacts: 30,  tagsPerContact: 5,  orders: 120, linesPerOrder: 4 },
     large:  { contacts: 100, tagsPerContact: 10, orders: 500, linesPerOrder: 8 },
 } as const satisfies Record<string, Required<BenchmarkDataOptions>>;
 
-/**
- * Builds a deterministic form-like data set. Two calls with the same options
- * produce deeply equal but referentially distinct objects, which is what the
- * `isEqual` benchmarks rely on.
- *
- * Empty strings / zeroes are sprinkled in on purpose: they exercise the
- * `treatNullAsDefault` branch of `isEqual` and the falsy-value handling of
- * `getObjectValue`.
- */
 export const createBenchmarkData = (options?: BenchmarkDataOptions): BenchModel => {
     const contacts = options?.contacts ?? SIZES.medium.contacts;
     const tagsPerContact = options?.tagsPerContact ?? SIZES.medium.tagsPerContact;

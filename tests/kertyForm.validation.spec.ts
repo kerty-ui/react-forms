@@ -492,8 +492,6 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
     });
 });
 
-// ─── on-change revalidation, messageDriven ───────────────────────────────────
-
 describe("KertyForm – messageDriven revalidation on change", () => {
     it("should report both fields as invalid when the whole form is validated", () => {
         const form = mountedForm(requiredLoginMessageValidator());
@@ -818,8 +816,6 @@ describe("KertyForm.applyValidationResults", () => {
         expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
     });
 });
-
-// ─── resetting results ───────────────────────────────────────────────────────
 
 describe("KertyForm.resetValidationResults", () => {
     it("should clear the form result when called without arguments", () => {

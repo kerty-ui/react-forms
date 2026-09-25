@@ -1,8 +1,6 @@
 import { bench, describe } from "vitest";
 import { getFieldPath } from "../../src/lib/utils/getFieldPath";
 
-// ─── path fixtures ────────────────────────────────────────────────────────────
-
 const FLAT = "firstName";
 const SIMPLE_NESTED = "profile.firstName";
 const DEEP_NESTED = "profile.address.city";
@@ -12,15 +10,20 @@ const ARRAY_DEEP = "orders[5].lines[3].product.name";
 const ARRAY_EMPTY = "items[].name";
 const MULTI_ARRAY = "a[0][1][2]";
 const LONG_PATH = "root.level1.level2.level3[0].level4[1].level5.leaf";
-
-// Rejected by getFieldPath – benchmarked separately so the throw cost does not
-// distort the comparison between the valid shapes.
 const ARRAY_NON_NUM = "items[key].value";
 const WITH_SPACE = "profile.first name";
 
-// ─── shape comparison ─────────────────────────────────────────────────────────
-// One describe so vitest reports these relative to each other: parsing is a
-// single pass over the string, so cost should track the path length.
+const BATCH = [
+    FLAT,
+    SIMPLE_NESTED,
+    DEEP_NESTED,
+    ARRAY_NUMERIC,
+    ARRAY_NESTED,
+    ARRAY_DEEP,
+    ARRAY_EMPTY,
+    MULTI_ARRAY,
+    LONG_PATH,
+];
 
 describe("getFieldPath – path shapes", () => {
     bench("flat (firstName)", () => {
@@ -60,20 +63,6 @@ describe("getFieldPath – path shapes", () => {
     });
 });
 
-// ─── mixed batch (representative real-world usage) ────────────────────────────
-
-const BATCH = [
-    FLAT,
-    SIMPLE_NESTED,
-    DEEP_NESTED,
-    ARRAY_NUMERIC,
-    ARRAY_NESTED,
-    ARRAY_DEEP,
-    ARRAY_EMPTY,
-    MULTI_ARRAY,
-    LONG_PATH,
-];
-
 describe("getFieldPath – caching (KertyForm parses each field name once)", () => {
     bench("uncached – parse every path in the batch", () => {
         for (let i = 0; i < BATCH.length; i++) {
@@ -94,10 +83,6 @@ describe("getFieldPath – caching (KertyForm parses each field name once)", () 
         }
     });
 });
-
-// ─── invalid paths ────────────────────────────────────────────────────────────
-// getFieldPath throws for these. Throwing dominates the measurement, so they
-// live in their own group and are only here to show the cost of the error path.
 
 describe("getFieldPath – invalid paths (throws)", () => {
     bench("non-numeric array key (items[key].value)", () => {

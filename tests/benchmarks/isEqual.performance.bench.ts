@@ -275,21 +275,18 @@ describe("isEqual – complex mixed structures (not equal, early detection)", ()
     const data1 = createBenchmarkData({ contacts: 10, tagsPerContact: 3, orders: 20, linesPerOrder: 3 });
     const data2 = createBenchmarkData({ contacts: 10, tagsPerContact: 3, orders: 20, linesPerOrder: 3 });
 
-    // Modify at top level
     const dataModified1: any = { ...data1, modifiedFlag: true };
 
     bench("structure differs at root level", () => {
         isEqual(data1, dataModified1);
     });
 
-    // Modify at shallow level
     const dataModified2: any = { ...data2, profile: { ...data2.profile, firstName: "Jane" } };
 
     bench("structure differs in shallow property", () => {
         isEqual(data1, dataModified2);
     });
 
-    // Modify deeply nested
     const dataModified3: any = JSON.parse(JSON.stringify(data1));
     if (dataModified3.orders.length > 0 && dataModified3.orders[0].lines.length > 0) {
         dataModified3.orders[0].lines[0].qty = 999;
@@ -613,11 +610,6 @@ describe("isEqual – stress tests", () => {
     });
 });
 
-// ─── treatNullAsDefault ───────────────────────────────────────────────────
-// KertyForm passes this flag from `dirtyCheckNullAsDefault` on every field
-// change, and it selects a completely separate implementation inside isEqual.
-// These groups compare the two branches on identical inputs.
-
 describe("isEqual – treatNullAsDefault vs default (primitives)", () => {
     bench("default – empty string vs null", () => {
         isEqual("", null);
@@ -637,8 +629,6 @@ describe("isEqual – treatNullAsDefault vs default (primitives)", () => {
 });
 
 describe("isEqual – treatNullAsDefault vs default (form data)", () => {
-    // The benchmark data deliberately contains empty strings and zeroes, so the
-    // normalizing branch has real work to do on every leaf.
     const data1 = createBenchmarkData(SIZES.small);
     const data2 = createBenchmarkData(SIZES.small);
 

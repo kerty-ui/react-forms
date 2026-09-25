@@ -1,6 +1,6 @@
-﻿import type { FieldPathPart, ObjectData } from "../types";
+import type { FieldPathPart, ObjectData } from "../types";
 
-export const setObjectValueImmutable = <TData extends ObjectData | null | undefined, TValue>(data: TData, path: FieldPathPart[], value: TValue): TData => {
+export const removeObjectValueImmutable = <TData extends ObjectData | null | undefined>(data: TData, path: FieldPathPart[]) => {
 
     if(data == null || path.length === 0) {
         return data;
@@ -39,7 +39,18 @@ export const setObjectValueImmutable = <TData extends ObjectData | null | undefi
     }
 
     const lastPart = path[lastIndex];
-    parentObj[lastPart.name] = value;
+    if(lastPart.isArrayItem) {
+        if (!Array.isArray(parentObj)) {
+            return;
+        }
+        const index = +lastPart.name;
+        if (index >= 0 && index < parentObj.length) {
+            parentObj.splice(index, 1);
+        }
+    }
+    else {
+        delete parentObj[lastPart.name];
+    }
 
     return rootObj;
 }

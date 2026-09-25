@@ -4,14 +4,8 @@ import { setObjectValueImmutable } from "../../src/lib/utils/setObjectValueImmut
 import { getObjectValue } from "../../src/lib/utils/getObjectValue";
 import { getFieldPath } from "../../src/lib/utils/getFieldPath";
 import { isEqual } from "../../src/lib/utils/isEqual";
-import type { FieldPathPart } from "../../src/lib/types";
+import { type FieldPathPart } from "../../src/lib";
 import { createBenchmarkData, SIZES } from "./benchmarkData";
-
-// setObjectValueImmutable never touches its input, so every immutable bench can
-// share one source object. setObjectValue mutates in place, so each mutating
-// bench gets its own instance and only ever writes shape-preserving values –
-// otherwise the first iteration would reshape the data and the remaining ones
-// would measure something else.
 
 const PATHS = {
     flat: "profile.firstName",
@@ -26,8 +20,6 @@ const parsed = Object.fromEntries(
     Object.entries(PATHS).map(([key, value]) => [key, getFieldPath(value)]),
 ) as Record<keyof typeof PATHS, FieldPathPart[]>;
 
-// ─── flat scalar ──────────────────────────────────────────────────────────────
-
 describe("set flat scalar (profile.firstName)", () => {
     const mutableData = createBenchmarkData();
     const immutableData = createBenchmarkData();
@@ -40,11 +32,6 @@ describe("set flat scalar (profile.firstName)", () => {
         setObjectValueImmutable(immutableData, parsed.flat, "Steve");
     });
 });
-
-// ─── deep array item ──────────────────────────────────────────────────────────
-// The immutable version clones every object on the way down, including the
-// orders array (120 entries at the default size), so the gap here is the real
-// cost of structural sharing.
 
 describe("set deep array item – string (orders[0].lines[2].sku)", () => {
     const mutableData = createBenchmarkData();
@@ -71,10 +58,6 @@ describe("set deep array item – number (orders[5].lines[3].qty)", () => {
         setObjectValueImmutable(immutableData, parsed.deepArrayNumber, 999);
     });
 });
-
-// ─── whole containers ─────────────────────────────────────────────────────────
-// The replacement values are built once: assigning a container is a plain
-// property write, so allocating it inside the bench would measure the wrong thing.
 
 describe("replace nested array (profile.contacts)", () => {
     const mutableData = createBenchmarkData();
@@ -104,10 +87,6 @@ describe("replace root array (orders)", () => {
     });
 });
 
-// ─── creating missing intermediates ───────────────────────────────────────────
-// Both variants start from a fresh empty object so they pay the same allocation
-// and both actually hit the "create intermediate" branch on every iteration.
-
 describe("create missing intermediates (profile.address.city on empty object)", () => {
     bench("setObjectValue (mutable)", () => {
         const target: any = {};
@@ -119,10 +98,6 @@ describe("create missing intermediates (profile.address.city on empty object)", 
         setObjectValueImmutable(target, parsed.missingIntermediates, "London");
     });
 });
-
-// ─── data size ────────────────────────────────────────────────────────────────
-// Mutable writes are O(path length) regardless of size; immutable writes copy
-// every array on the path, so they scale with orders.length.
 
 describe("data size – mutable set (orders[0].lines[1].sku)", () => {
     const path = getFieldPath("orders[0].lines[1].sku");
@@ -162,10 +137,6 @@ describe("data size – immutable set (orders[0].lines[1].sku)", () => {
     });
 });
 
-// ─── sequential updates ───────────────────────────────────────────────────────
-// A user filling in five fields. The immutable variant has to thread the new
-// root through each call, which is what KertyForm.setFieldValue does.
-
 const SEQUENCE: Array<{ path: FieldPathPart[]; value: unknown }> = [
     { path: getFieldPath("profile.firstName"), value: "Steve" },
     { path: getFieldPath("profile.lastName"), value: "Kerr" },
@@ -191,10 +162,6 @@ describe("5 sequential field updates", () => {
         }
     });
 });
-
-// ─── redundant writes ─────────────────────────────────────────────────────────
-// KertyForm skips work when the value did not change. This measures whether the
-// isEqual guard pays for itself: 10 writes of the value that is already there.
 
 describe("10 redundant writes of the same value (orders[0].lines[2].sku)", () => {
     const immutableData = createBenchmarkData();

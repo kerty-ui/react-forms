@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Validations } from "../src/lib/validation/validations";
+import { Validations } from "../src/lib";
 
 const MIN_DATE = new Date(-8640000000000000);
 const INVALID_DATE = new Date(NaN);
@@ -10,8 +10,6 @@ const daysFromToday = (days: number) => {
     date.setDate(date.getDate() + days);
     return date;
 };
-
-// ─── nil ─────────────────────────────────────────────────────────────────────
 
 describe("Validations.IsNil", () => {
     it.each([
@@ -28,8 +26,6 @@ describe("Validations.IsNil", () => {
         expect(Validations.IsNotNil(null)).toBe(false);
     });
 });
-
-// ─── text ────────────────────────────────────────────────────────────────────
 
 describe("Validations.IsTextEmpty", () => {
     it.each([
@@ -67,8 +63,6 @@ describe("Validations.IsTextEmptyOrWhitespace", () => {
     });
 });
 
-// ─── arrays ──────────────────────────────────────────────────────────────────
-
 describe("Validations.IsArrayEmpty", () => {
     it.each([
         ["null", null, true],
@@ -83,8 +77,6 @@ describe("Validations.IsArrayEmpty", () => {
         expect(Validations.IsArrayNotEmpty([1])).toBe(true);
     });
 });
-
-// ─── dates ───────────────────────────────────────────────────────────────────
 
 describe("Validations.IsDateEmpty", () => {
     it("should return true when the value is null", () => {
@@ -202,8 +194,6 @@ describe("Validations – date comparisons", () => {
     });
 });
 
-// ─── length ──────────────────────────────────────────────────────────────────
-
 describe("Validations – length checks", () => {
     it("should return true when the string is shorter than the minimum", () => {
         expect(Validations.IsShorterThan("ab", 3)).toBe(true);
@@ -226,8 +216,6 @@ describe("Validations – length checks", () => {
     });
 });
 
-// ─── substrings ──────────────────────────────────────────────────────────────
-
 describe("Validations – substring checks", () => {
     it("should return true when the value contains the search text", () => {
         expect(Validations.Contains("hello world", "world")).toBe(true);
@@ -245,8 +233,6 @@ describe("Validations – substring checks", () => {
         expect(Validations.DoesNotContain(null, "world")).toBe(false);
     });
 });
-
-// ─── numbers ─────────────────────────────────────────────────────────────────
 
 describe("Validations – numeric checks", () => {
     it.each([
@@ -284,8 +270,6 @@ describe("Validations – numeric checks", () => {
         expect(Validations.IsGreaterOrEqualThan(0, 0)).toBe(true);
     });
 });
-
-// ─── patterns ────────────────────────────────────────────────────────────────
 
 describe("Validations.DoesNotMatch", () => {
     it("should return true when the value does not match the pattern", () => {

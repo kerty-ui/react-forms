@@ -31,7 +31,11 @@ type ListForm = {
     items: string[];
 };
 
-/** Renders `testId` with the number of times this component has rendered. */
+type ParentForm = {
+    parent: { text: string; other: string };
+    sibling: string;
+};
+
 const RenderCount = ({ testId }: { testId: string }) => {
     const count = useRef(0);
     count.current += 1;
@@ -39,8 +43,6 @@ const RenderCount = ({ testId }: { testId: string }) => {
 };
 
 const renderCountOf = (testId: string) => Number(screen.getByTestId(testId).textContent);
-
-// ─── useForm ─────────────────────────────────────────────────────────────────
 
 describe("useForm", () => {
     it("should return the same form instance when the component re-renders", () => {
@@ -68,8 +70,6 @@ describe("useForm", () => {
         expect(screen.getByTestId("data").textContent).toBe('{"username":"bob","password":"pw"}');
     });
 });
-
-// ─── whole-form model: useFormWatch / useWatch ───────────────────────────────
 
 describe("useFormWatch", () => {
     it("should expose the current data when a field changes", () => {
@@ -150,8 +150,6 @@ describe("useWatch", () => {
         expect(renderCountOf("watcher")).toBe(before + 1);
     });
 });
-
-// ─── field model: useField / FormField ───────────────────────────────────────
 
 describe("useField", () => {
     it("should expose the current field value when the field changes", () => {
@@ -339,8 +337,6 @@ describe("useFieldState", () => {
     });
 });
 
-// ─── selective form subscriptions ────────────────────────────────────────────
-
 describe("useDataWatch", () => {
     it("should re-render the subscriber when the selected value changes", () => {
         const form = { current: null as any };
@@ -418,8 +414,6 @@ describe("useStateWatch", () => {
         expect(renderCountOf("watcher")).toBe(before);
     });
 });
-
-// ─── array fields ────────────────────────────────────────────────────────────
 
 describe("useFormValidationResult", () => {
     it("should return undefined when the form has no validation result", () => {
@@ -575,8 +569,6 @@ describe("FormArrayField", () => {
     });
 });
 
-// ─── form validation result component ────────────────────────────────────────
-
 describe("FormValidationResult", () => {
     it("should render nothing when the form has no validation result", () => {
         const Component = () => {
@@ -616,8 +608,6 @@ describe("FormValidationResult", () => {
     });
 });
 
-// ─── context ─────────────────────────────────────────────────────────────────
-
 describe("useFormContext", () => {
     it("should return the provided form when used inside a FormProvider", () => {
         const form = { current: null as any };
@@ -645,8 +635,6 @@ describe("useFormContext", () => {
         expect(() => render(<Child />)).toThrow("useFormContext() must be used with-in FormProvider");
     });
 });
-
-// ─── end-to-end validation flow ──────────────────────────────────────────────
 
 describe("form validation flow", () => {
     it("should show the field message when submit validates an empty form", () => {
@@ -710,13 +698,6 @@ describe("form validation flow", () => {
         expect(screen.getByTestId("message").textContent).toBe("Welcome, Chuck Norris!");
     });
 });
-
-// ─── parent notification ─────────────────────────────────────────────────────
-
-type ParentForm = {
-    parent: { text: string; other: string };
-    sibling: string;
-};
 
 describe("useField – parent notification", () => {
     it("should re-render the component bound to the parent when a child field changes", () => {

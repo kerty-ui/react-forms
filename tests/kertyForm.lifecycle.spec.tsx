@@ -19,7 +19,6 @@ type ItemsForm = {
     items: Item[];
 };
 
-/** fieldDriven validator: every item needs a code. */
 const itemsValidator = {
     mode: "fieldDriven" as const,
     validate: ({ data }: { data: ItemsForm }) => {
@@ -44,7 +43,6 @@ const Cell = ({ form, name }: { form: IKertyForm<ItemsForm>; name: any }) => {
     return <span data-testid={name}>{field.validationResult?.messages[0]?.text ?? "-"}</span>;
 };
 
-/** Same field, different component type - mirrors a read-only/editable cell swap. */
 const ReadOnlyCell = ({ form, name }: { form: IKertyForm<ItemsForm>; name: any }) => {
     const field = useField(form, name);
     return <b data-testid={name}>{field.validationResult?.messages[0]?.text ?? "-"}</b>;

@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { ValidationResult } from "../src/lib/validation/validationResult";
-import { SingleMessageResult } from "../src/lib/validation/singleMessageResult";
-import { SingleMessageResults } from "../src/lib/validation/singleMessageResults";
-import { MultiMessageResults } from "../src/lib/validation/multiMessageResults";
-import { SingleMessageDrivenValidator } from "../src/lib/validation/singleMessageDrivenValidator";
-import { MultiMessageDrivenValidator } from "../src/lib/validation/multiMessageDrivenValidator";
-import { Severity } from "../src/lib/types";
+import {
+    ValidationResult,
+    SingleMessageResult,
+    SingleMessageResults,
+    MultiMessageResults,
+    SingleMessageDrivenValidator,
+    MultiMessageDrivenValidator,
+    Severity
+} from "../src/lib";
 
 const texts = (result: { messages: readonly { text: string }[] } | undefined) =>
     result?.messages.map(m => m.text);
-
-// ─── ValidationResult ────────────────────────────────────────────────────────
 
 describe("ValidationResult", () => {
     it("should report no messages when newly created", () => {
@@ -98,8 +98,6 @@ describe("ValidationResult", () => {
     });
 });
 
-// ─── SingleMessageResult ─────────────────────────────────────────────────────
-
 describe("SingleMessageResult", () => {
     it("should hold exactly the given message when constructed", () => {
         const result = new SingleMessageResult("Required");
@@ -125,8 +123,6 @@ describe("SingleMessageResult", () => {
         expect(result.has(Severity.Error)).toBe(false);
     });
 });
-
-// ─── SingleMessageResults ────────────────────────────────────────────────────
 
 describe("SingleMessageResults", () => {
     it("should be valid when no messages were added", () => {
@@ -173,8 +169,6 @@ describe("SingleMessageResults", () => {
         expect(results.isValid).toBe(false);
     });
 });
-
-// ─── MultiMessageResults ─────────────────────────────────────────────────────
 
 describe("MultiMessageResults", () => {
     it("should be valid when no messages were added", () => {
@@ -268,8 +262,6 @@ describe("MultiMessageResults", () => {
         expect(results.isValid).toBe(false);
     });
 });
-
-// ─── message driven validators ───────────────────────────────────────────────
 
 describe("SingleMessageDrivenValidator", () => {
     it("should report messageDriven mode when constructed", () => {

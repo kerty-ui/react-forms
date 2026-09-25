@@ -6,11 +6,6 @@ import { createBenchmarkData, SIZES } from "./benchmarkData";
 
 const data = createBenchmarkData();
 
-/**
- * Mirrors what KertyForm does: field names are parsed once and the resulting
- * `FieldPathPart[]` is kept on the field record (`#fields`), so reads only pay
- * for the lookup itself.
- */
 const createCachedReader = () => {
     const cache = new Map<string, FieldPathPart[]>();
     return <TValue,>(source: any, name: string): TValue | undefined => {
@@ -22,8 +17,6 @@ const createCachedReader = () => {
         return getObjectValue<TValue>(source, path);
     };
 };
-
-// ─── path fixtures ────────────────────────────────────────────────────────────
 
 const PATHS = {
     flat: "profile.firstName",
@@ -39,10 +32,6 @@ const PATHS = {
 const parsed = Object.fromEntries(
     Object.entries(PATHS).map(([key, value]) => [key, getFieldPath(value)]),
 ) as Record<keyof typeof PATHS, FieldPathPart[]>;
-
-// ─── pre-parsed lookups ───────────────────────────────────────────────────────
-// Pure traversal cost: no parsing, no cache lookup. Cost should track the number
-// of segments, and the "missing" cases should exit early.
 
 describe("getObjectValue – pre-parsed path, by path shape", () => {
     bench("flat property (profile.firstName)", () => {
@@ -78,10 +67,6 @@ describe("getObjectValue – pre-parsed path, by path shape", () => {
     });
 });
 
-// ─── parsing strategies ───────────────────────────────────────────────────────
-// The comparison that actually matters for KertyForm: is caching the parsed path
-// worth a Map lookup? Same path, same data, three ways of getting there.
-
 describe("getObjectValue – parse strategy (deep array item)", () => {
     const cachedRead = createCachedReader();
 
@@ -114,10 +99,6 @@ describe("getObjectValue – parse strategy (flat property)", () => {
     });
 });
 
-// ─── data size ────────────────────────────────────────────────────────────────
-// Reads walk the path, never the collections, so these three should be flat.
-// A divergence here means the lookup picked up a size dependency.
-
 describe("getObjectValue – data size (orders[0].lines[1].sku)", () => {
     const small = createBenchmarkData(SIZES.small);
     const medium = createBenchmarkData(SIZES.medium);
@@ -136,8 +117,6 @@ describe("getObjectValue – data size (orders[0].lines[1].sku)", () => {
         getObjectValue(large, path);
     });
 });
-
-// ─── guards ───────────────────────────────────────────────────────────────────
 
 describe("getObjectValue – guards", () => {
     const emptyPath: FieldPathPart[] = [];

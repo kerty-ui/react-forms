@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FieldValidations, Validator } from "../src/lib/validation/validator";
-import { Validations } from "../src/lib/validation/validations";
-import { Severity, type IValidationResult } from "../src/lib/types";
-
-// ─── helpers ─────────────────────────────────────────────────────────────────
+import { FieldValidations, Validator, Validations, Severity, type IValidationResult } from "../src/lib";
 
 const textsFor = (result: Map<string, IValidationResult>, field: string) =>
     result.get(field)?.messages.map(m => m.text);
@@ -19,8 +15,6 @@ const required = (message: string) => ({
     message,
 });
 
-// ─── mode ────────────────────────────────────────────────────────────────────
-
 describe("Validator", () => {
     it("should report fieldDriven mode when constructed", () => {
         const validator = new Validator<{ name: string }>({});
@@ -28,8 +22,6 @@ describe("Validator", () => {
         expect(validator.mode).toBe("fieldDriven");
     });
 });
-
-// ─── full form validation ────────────────────────────────────────────────────
 
 describe("Validator.validate – full form", () => {
     it("should return a result for the failing field when a rule fires", () => {
@@ -136,8 +128,6 @@ describe("Validator.validate – full form", () => {
     });
 });
 
-// ─── validation context ──────────────────────────────────────────────────────
-
 describe("Validator – validation context", () => {
     it("should expose the form data as parent when the field is at the root", () => {
         const data = { value: "root" };
@@ -226,8 +216,6 @@ describe("Validator – validation context", () => {
     });
 });
 
-// ─── nested structures ───────────────────────────────────────────────────────
-
 describe("Validator – nested structures", () => {
     it("should key the result by the full dotted path when a nested field fails", () => {
         const validator = new Validator<any>({
@@ -275,8 +263,6 @@ describe("Validator – nested structures", () => {
         expect([...result.keys()].sort()).toEqual(["matrix[0][1]", "matrix[1][0]"]);
     });
 });
-
-// ─── rule options ────────────────────────────────────────────────────────────
 
 describe("Validator – rule options", () => {
     it("should not run the check when the when predicate returns false", () => {
@@ -418,8 +404,6 @@ describe("Validator – rule options", () => {
         expect(result.size).toBe(0);
     });
 });
-
-// ─── on-change (field scoped) validation ─────────────────────────────────────
 
 describe("Validator.validate – scoped to a changed field", () => {
     it("should validate the changed field when a field name is given", () => {

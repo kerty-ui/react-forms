@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ValidationBuilder, ValidatorBuilder } from "../src/lib/validation/validatorBuilder";
-import { Validations } from "../src/lib/validation/validations";
-import { Severity, type IValidationResult } from "../src/lib/types";
-
-// ─── shared models ───────────────────────────────────────────────────────────
+import { ValidationBuilder, ValidatorBuilder, Validations, Severity, type IValidationResult } from "../src/lib";
 
 type SimpleModel = {
     name: string;
@@ -35,8 +31,6 @@ type DeepModel = {
     };
 };
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
 const textsFor = (result: Map<string, IValidationResult>, field: string) =>
     result.get(field)?.messages.map(m => m.text);
 
@@ -45,8 +39,6 @@ const firstTextFor = (result: Map<string, IValidationResult>, field: string) =>
 
 const isTextEmpty = (ctx: any) => Validations.IsTextEmpty(ctx.value);
 const isUnderage = (ctx: any) => Validations.IsLessThan(ctx.value, 18);
-
-// ─── builder API ─────────────────────────────────────────────────────────────
 
 describe("ValidatorBuilder.validationFor", () => {
     it("should return a ValidationBuilder when a path is requested", () => {
@@ -135,8 +127,6 @@ describe("ValidatorBuilder.build", () => {
         expect(validator.mode).toBe("fieldDriven");
     });
 });
-
-// ─── path shapes ─────────────────────────────────────────────────────────────
 
 describe("ValidatorBuilder – root level paths", () => {
     it("should report the failure under the field name when a root field fails", () => {
@@ -348,8 +338,6 @@ describe("ValidatorBuilder – array paths", () => {
     });
 });
 
-// ─── rule options pass-through ───────────────────────────────────────────────
-
 describe("ValidatorBuilder – rule options", () => {
     it("should skip the rule when its when predicate returns false", () => {
         const validator = new ValidatorBuilder<SimpleModel>()
@@ -441,8 +429,6 @@ describe("ValidatorBuilder – rule options", () => {
         expect(firstTextFor(result, "name")).toBe("Name is required");
     });
 });
-
-// ─── on-change scoping ───────────────────────────────────────────────────────
 
 describe("ValidatorBuilder – scoped to a changed field", () => {
     it("should validate only the changed field when a field name is given", () => {

@@ -1,7 +1,8 @@
 ﻿import { getFieldPath } from "./utils/getFieldPath";
 import { getObjectValue } from "./utils/getObjectValue";
-import { isEqual } from "./utils/isEqual";
 import { setObjectValueImmutable } from "./utils/setObjectValueImmutable";
+import { removeObjectValueImmutable } from "./utils/removeObjectValueImmutable.ts";
+import { isEqual } from "./utils/isEqual";
 import { ValidationResult } from "./validation/validationResult";
 import {
     Severity,
@@ -23,6 +24,7 @@ import {
     type IValidator,
     type IValidationResult,
     type ApplyValidationOptions,
+    type ObjectData,
 } from "./types";
 
 type NotifyListenerOptions = {
@@ -67,7 +69,7 @@ export const defaultFormConfig = {
     clearFormValidationResultsOnChange: true,
 } as Required<FormConfig>
 
-export class KertyForm<TData> implements IKertyForm<TData> {
+export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
     #dirtyCheckEnabled: boolean = true;
     #dirtyCheckNullAsDefault: boolean = true;
@@ -291,6 +293,28 @@ export class KertyForm<TData> implements IKertyForm<TData> {
         }
 
         this.#onFieldChange(name as string, field, value);
+    }
+
+    clearFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent?: boolean) {
+        const fieldNames = Array.isArray(name) ? name : [name];
+        for(const fieldName of fieldNames) {
+            const field = this.#getField(fieldName as string);
+            this.#data = setObjectValueImmutable(this.#data, field.path, undefined);
+            if(!silent) {
+                this.#onFieldChange(fieldName as string, field, undefined);
+            }
+        }
+    }
+
+    removeFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent?: boolean) {
+        const fieldNames = Array.isArray(name) ? name : [name];
+        for(const fieldName of fieldNames) {
+            const field = this.#getField(fieldName as string);
+            this.#data = removeObjectValueImmutable(this.#data, field.path);
+            if(!silent) {
+                this.#onFieldChange(fieldName as string, field, undefined);
+            }
+        }
     }
 
     touch(name?: FieldPath<TData>) {

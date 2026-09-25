@@ -96,4 +96,5 @@ ratio should not be trusted without a rerun on an idle machine.
 | `getFieldPath.performance.bench.ts` | Path parsing by shape, cached vs uncached, invalid paths |
 | `getObjectValue.performance.bench.ts` | Reads by path shape, parse strategy, data size, guards |
 | `setObjectValue.performance.bench.ts` | Mutable vs immutable writes, data-size scaling, redundant-write guard |
+| `removeObjectValue.performance.bench.ts` | Immutable removal vs `set(undefined)`, array splice position, data-size scaling |
 | `isEqual.performance.bench.ts` | Primitives, arrays, objects, dates, circular refs, `treatNullAsDefault` |

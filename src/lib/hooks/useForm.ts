@@ -1,8 +1,8 @@
 ﻿import { useRef } from "react";
 import { KertyForm } from "../kertyForm";
-import type { FormOptions, IKertyForm } from "./../types";
+import type { FormOptions, IKertyForm, ObjectData } from "./../types";
 
-export const useForm = <TDataModel,>(
+export const useForm = <TDataModel extends ObjectData>(
     options?: FormOptions<TDataModel>
 ): IKertyForm<TDataModel> => {
     const form = useRef<IKertyForm<TDataModel>>(null);

@@ -1,12 +1,12 @@
-﻿import type { FieldPathPart } from "../types";
+﻿import type { FieldPathPart, ObjectData } from "../types";
 
-export const setObjectValue = <TValue,>(data: any, path: FieldPathPart[], value: TValue) => {
+export const setObjectValue = <TValue,>(data: ObjectData | null | undefined, path: FieldPathPart[], value: TValue) => {
 
     if(data == null || path.length === 0) {
         return;
     }
 
-    let parentObj = data;
+    let parentObj: any = data;
     const lastIndex = path.length - 1;
 
     for (let i = 0; i < lastIndex; i++) {

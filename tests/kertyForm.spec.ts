@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KertyForm, defaultFormConfig } from "../src/lib/kertyForm";
+import { KertyForm, defaultFormConfig, type ObjectData } from "../src/lib";
 
 type LoginForm = {
     username: string;
@@ -13,10 +13,7 @@ type ProfileForm = {
     };
 };
 
-/** Registers `name` so value/state reads and notifications work, mirroring what a mounted field does. */
-const register = <T,>(form: KertyForm<T>, name: string) => form.addFieldListener(name as any, () => { });
-
-// ─── construction ────────────────────────────────────────────────────────────
+const register = <T extends ObjectData>(form: KertyForm<T>, name: string) => form.addFieldListener(name as any, () => { });
 
 describe("KertyForm – construction", () => {
     it("should start with an empty object when no data is given", () => {
@@ -57,8 +54,6 @@ describe("KertyForm – construction", () => {
         expect(form.getState().isValid).toBe(true);
     });
 });
-
-// ─── configuration ───────────────────────────────────────────────────────────
 
 describe("KertyForm – configuration", () => {
     it("should enable every tracking option when the default config is used", () => {
@@ -119,8 +114,6 @@ describe("KertyForm – configuration", () => {
     });
 });
 
-// ─── reading values ──────────────────────────────────────────────────────────
-
 describe("KertyForm.getFieldValue", () => {
     it("should return the value when the field has been registered", () => {
         const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
@@ -178,8 +171,6 @@ describe("KertyForm.getFieldState", () => {
     });
 });
 
-// ─── writing values ──────────────────────────────────────────────────────────
-
 describe("KertyForm.setFieldValue", () => {
     it("should write the value into the form data when called", () => {
         const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
@@ -231,8 +222,6 @@ describe("KertyForm.setFieldValue", () => {
         expect(form.getState()).toEqual({ isTouched: false, isDirty: false, isValid: true, isValidated: false });
     });
 });
-
-// ─── dirty tracking ──────────────────────────────────────────────────────────
 
 describe("KertyForm – dirty tracking", () => {
     it("should mark the form dirty when a field moves away from its initial value", () => {
@@ -322,8 +311,6 @@ describe("KertyForm – dirty tracking", () => {
     });
 });
 
-// ─── dirty tracking across unmount ───────────────────────────────────────────
-
 describe("KertyForm – dirty tracking when a field unsubscribes", () => {
     it("should clear the form dirty flag when the last dirty field unsubscribes", () => {
         const form = new KertyForm<any>({ data: { a: 1 } });
@@ -391,8 +378,6 @@ describe("KertyForm – dirty tracking when a field unsubscribes", () => {
         expect(form.getState().isDirty).toBe(true);
     });
 });
-
-// ─── touch ───────────────────────────────────────────────────────────────────
 
 describe("KertyForm.touch", () => {
     it("should mark the form touched when called without a field name", () => {
@@ -473,8 +458,6 @@ describe("KertyForm.touch", () => {
     });
 });
 
-// ─── reset ───────────────────────────────────────────────────────────────────
-
 describe("KertyForm.reset", () => {
     it("should restore the initial data when called without arguments", () => {
         const form = new KertyForm<any>({ data: { a: 1 } });
@@ -543,8 +526,6 @@ describe("KertyForm.reset", () => {
         expect(calls).toBe(1);
     });
 });
-
-// ─── snapshots ───────────────────────────────────────────────────────────────
 
 describe("KertyForm.getSnapshot", () => {
     it("should return the same object on consecutive calls when nothing changed", () => {

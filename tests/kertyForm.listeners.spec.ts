@@ -1,15 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KertyForm } from "../src/lib/kertyForm";
-import { ValidationResult } from "../src/lib/validation/validationResult";
-import { Severity, type FormListenerOptions } from "../src/lib/types";
-
-/**
- * These tests pin down the notification model, which is what lets the same form be
- * consumed either as a single re-rendering unit (`useFormWatch` / `useWatch` — a form
- * listener) or as independently re-rendering fields (`useField` / `FormField` — a field
- * listener). Over-notifying is not a correctness bug but it is a performance regression,
- * so call counts are asserted explicitly.
- */
+import { KertyForm, ValidationResult, Severity, type FormListenerOptions } from "../src/lib";
 
 const dataOnly: FormListenerOptions = {
     listenDataChange: true,
@@ -36,8 +26,6 @@ const counter = () => {
     const state = { calls: 0 };
     return [state, () => { state.calls++; }] as const;
 };
-
-// ─── whole form listeners ────────────────────────────────────────────────────
 
 describe("KertyForm.addListener", () => {
     it("should notify the listener when any field value changes", () => {
@@ -143,8 +131,6 @@ describe("KertyForm.addListener", () => {
         expect(count.calls).toBe(0);
     });
 });
-
-// ─── field listeners ─────────────────────────────────────────────────────────
 
 describe("KertyForm.addFieldListener", () => {
     it("should notify the listener when its own field changes", () => {
@@ -252,8 +238,6 @@ describe("KertyForm.addFieldListener", () => {
         expect(count.calls).toBe(1);
     });
 });
-
-// ─── hierarchical notification ───────────────────────────────────────────────
 
 describe("KertyForm – hierarchical field notification", () => {
     it("should notify a child field listener when its parent object is replaced", () => {
@@ -436,8 +420,6 @@ describe("KertyForm – hierarchical field notification", () => {
         expect(count.calls).toBe(1);
     });
 });
-
-// ─── mixed subscriptions ─────────────────────────────────────────────────────
 
 describe("KertyForm – mixed subscriptions", () => {
     it("should notify only the changed field and the form listener when one field changes", () => {

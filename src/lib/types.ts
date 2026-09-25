@@ -156,6 +156,8 @@ export type ApplyValidationOptions = {
     mode?: "replace" | "patch";
 }
 
+export type ObjectData = object & { [Symbol.iterator]?: never };
+
 export type FieldPathPart = {
     name: string;
     isArray?: boolean;
@@ -320,6 +322,8 @@ export interface IKertyForm<TData> extends IFormValidation<TData>, IFormArrayAct
     getFieldState<TPath extends FieldPath<TData>>(name: TPath): FieldState;
     setFieldValue<TValue>(name: FieldPathByValue<TData, TValue>, value: TValue | null | undefined, silent?: boolean): void;
     setFieldValue<TPath extends FieldPath<TData>>(name: TPath, value: FieldPathValue<TData, TPath> | null | undefined, silent?: boolean): void;
+    clearFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent?: boolean): void;
+    removeFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent?: boolean): void;
     touch(name?: FieldPath<TData>): void;
     reset(data?: TData): void;
 }

@@ -6,8 +6,6 @@ const getObjectValue = (data: any, name: string) => {
     return getObjectValueInternal(data, getFieldPath(name));
 }
 
-// ─── shared test fixture ──────────────────────────────────────────────────────
-
 const data = {
     name: "Alice",
     age: 30,
@@ -43,20 +41,14 @@ const data = {
     matrix: [[10, 20], [30, 40]],
 };
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
 const get = <T = unknown>(path: string, obj: any = data) =>
     getObjectValue(obj, path) as T | undefined;
-
-// ─── empty path ───────────────────────────────────────────────────────────────
 
 describe("getObjectValue – empty path", () => {
     it("returns undefined for an empty FieldPath array", () => {
         expect(getObjectValue(data, "")).toBeUndefined();
     });
 });
-
-// ─── flat properties ──────────────────────────────────────────────────────────
 
 describe("getObjectValue – flat properties", () => {
     it("reads a string property from the root", () => {
@@ -76,8 +68,6 @@ describe("getObjectValue – flat properties", () => {
     });
 });
 
-// ─── falsy leaf values ────────────────────────────────────────────────────────
-
 describe("getObjectValue – falsy leaf values", () => {
     it("returns 0 (not undefined)", () => {
         expect(get<number>("score")).toBe(0);
@@ -96,8 +86,6 @@ describe("getObjectValue – falsy leaf values", () => {
     });
 });
 
-// ─── nested objects ───────────────────────────────────────────────────────────
-
 describe("getObjectValue – nested objects", () => {
     it("reads a property one level deep", () => {
         expect(get<string>("address.city")).toBe("London");
@@ -112,8 +100,6 @@ describe("getObjectValue – nested objects", () => {
     });
 });
 
-// ─── root array ───────────────────────────────────────────────────────────────
-
 describe("getObjectValue – root array", () => {
     it("returns the entire array when the path resolves to an array", () => {
         expect(get("tags")).toEqual(["ts", "js", "node"]);
@@ -125,8 +111,6 @@ describe("getObjectValue – root array", () => {
         expect(result).toHaveLength(2);
     });
 });
-
-// ─── array items ─────────────────────────────────────────────────────────────
 
 describe("getObjectValue – array item access", () => {
     it("reads the first element of a primitive array", () => {
@@ -154,8 +138,6 @@ describe("getObjectValue – array item access", () => {
     });
 });
 
-// ─── deeply nested array paths ────────────────────────────────────────────────
-
 describe("getObjectValue – deeply nested array paths", () => {
     it("reads orders[0].lines[0].sku", () => {
         expect(get<string>("orders[0].lines[0].sku")).toBe("A1");
@@ -174,8 +156,6 @@ describe("getObjectValue – deeply nested array paths", () => {
     });
 });
 
-// ─── multi-dimensional arrays ─────────────────────────────────────────────────
-
 describe("getObjectValue – multi-dimensional arrays", () => {
     it("reads matrix[0][0]", () => {
         expect(get<number>("matrix[0][0]")).toBe(10);
@@ -193,8 +173,6 @@ describe("getObjectValue – multi-dimensional arrays", () => {
         expect(get<number>("matrix[1][1]")).toBe(40);
     });
 });
-
-// ─── missing / null intermediate nodes ───────────────────────────────────────
 
 describe("getObjectValue – missing / null intermediates → undefined", () => {
     it("returns undefined when a nested key does not exist", () => {
@@ -222,8 +200,6 @@ describe("getObjectValue – missing / null intermediates → undefined", () => 
         expect(getObjectValue(obj, "a.b.c")).toBeUndefined();
     });
 });
-
-// ─── data edge cases ─────────────────────────────────────────────────────────
 
 describe("getObjectValue – data edge cases", () => {
     it("returns undefined when data is null", () => {
