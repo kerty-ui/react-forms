@@ -81,6 +81,11 @@ ratio should not be trusted without a rerun on an idle machine.
   data instance and only writes shape-preserving values. Writing, say, `[]` over
   `orders` would shrink the data after the first iteration and the remaining
   iterations would measure a different object.
+- **Growing `KertyForm` arrays are restored inside the bench.** Vitest does not
+  expose tinybench's per-iteration hooks, so `prependItems` / `insertItems`
+  benches first put the original rows back with a silent `setFieldValue`.
+  Without that the array would grow by one item on every iteration. The restore
+  costs about 0.1 µs; the "add one item" group reports it as a separate row.
 - **Throwing paths live in their own group.** `getFieldPath` rejects
   non-numeric array keys and whitespace; the throw dominates the measurement, so
   those cases are isolated and never mixed with valid shapes.
@@ -98,3 +103,4 @@ ratio should not be trusted without a rerun on an idle machine.
 | `setObjectValue.performance.bench.ts` | Mutable vs immutable writes, data-size scaling, redundant-write guard |
 | `removeObjectValue.performance.bench.ts` | Immutable removal vs `set(undefined)`, array splice position, data-size scaling |
 | `isEqual.performance.bench.ts` | Primitives, arrays, objects, dates, circular refs, `treatNullAsDefault` |
+| `kertyForm.performance.bench.ts` | `KertyForm.setFieldValue` / `prependItems` / `insertItems` by form size, with and without field listeners |
