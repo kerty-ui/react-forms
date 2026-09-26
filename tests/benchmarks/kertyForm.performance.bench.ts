@@ -1,5 +1,13 @@
 import { bench, describe } from "vitest";
 import { KertyForm } from "../../src/lib";
+import {
+    FieldValidations,
+    Validator,
+    ValidationResult,
+    Severity,
+    type IValidationResult,
+    type IValidator
+} from "../../src/lib";
 
 type Row = Record<string, string>;
 type Grid = { title: string; rows: Row[] };
@@ -20,8 +28,8 @@ const noop = () => {};
 // grid of FormFields registers.
 type Mode = "bare" | "subscribed";
 
-const createForm = (rows: number, mode: Mode) => {
-    const form = new KertyForm<Grid>({ data: { title: "Grid", rows: createRows(rows) } });
+const createForm = (rows: number, mode: Mode, value = "value", validator?: IValidator<Grid>) => {
+    const form = new KertyForm<Grid>({ data: { title: "Grid", rows: createRows(rows, value) }, validator });
 
     if(mode === "subscribed") {
         form.addFieldListener("title", noop);
@@ -257,5 +265,230 @@ describe("add one item at 1000 rows (subscribed)", () => {
     bench("setFieldValue with a prebuilt array", () => {
         replace.restore();
         replace.form.setFieldValue("rows", replacement);
+    });
+});
+
+// ── validation fixtures ────────────────────────────────────────────────────
+
+const ERROR = new ValidationResult().add({ text: "Required", severity: Severity.Error });
+const CLEARED = new ValidationResult();
+
+const requiredCell = new FieldValidations({ check: (ctx) => ctx.value === "", message: "Required" });
+
+const createGridValidator = () => new Validator<any>({
+    rows: [Object.fromEntries(Array.from({ length: CELLS_PER_ROW }, (_, cell) => [`_cell${cell}`, requiredCell]))],
+});
+
+const cellResults = (rows: number, result: IValidationResult) => {
+    const results = new Map<string, IValidationResult>();
+    for(let row = 0; row < rows; row++) {
+        for(let cell = 0; cell < CELLS_PER_ROW; cell++) {
+            results.set(`rows[${row}].cell${cell}`, result);
+        }
+    }
+    return results;
+};
+
+// Returns a prebuilt map, so validate() measures only the form's bookkeeping.
+const precomputedValidator = (results: Map<string, IValidationResult>): IValidator<Grid> => ({
+    mode: "fieldDriven",
+    validate: () => results,
+});
+
+// ── validate ───────────────────────────────────────────────────────────────
+
+// Every iteration clears the previous results and applies the same ones again,
+// so the form reaches a steady state after the first call.
+for(const mode of ["bare", "subscribed"] as const) {
+    describe(`validate – Validator, all cells valid by form size (${mode})`, () => {
+        for(const rows of SIZES) {
+            const form = createForm(rows, mode, "value", createGridValidator());
+
+            bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
+                form.validate();
+            });
+        }
+    });
+}
+
+for(const mode of ["bare", "subscribed"] as const) {
+    describe(`validate – Validator, all cells invalid by form size (${mode})`, () => {
+        for(const rows of SIZES) {
+            const form = createForm(rows, mode, "", createGridValidator());
+
+            bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
+                form.validate();
+            });
+        }
+    });
+}
+
+describe("validate – variants at 1000 rows (subscribed)", () => {
+    const noValidator = createForm(1_000, "subscribed");
+    const valid = createForm(1_000, "subscribed", "value", createGridValidator());
+    const invalid = createForm(1_000, "subscribed", "", createGridValidator());
+    const precomputed = createForm(1_000, "subscribed", "", precomputedValidator(cellResults(1_000, ERROR)));
+    const formLevel = createForm(1_000, "subscribed", "value", precomputedValidator(new Map([["", ERROR]])));
+
+    bench("no validator", () => {
+        noValidator.validate();
+    });
+
+    bench("Validator – all cells valid", () => {
+        valid.validate();
+    });
+
+    bench("Validator – all cells invalid", () => {
+        invalid.validate();
+    });
+
+    bench("precomputed results – all cells invalid (form bookkeeping only)", () => {
+        precomputed.validate();
+    });
+
+    bench("precomputed results – form-level error only", () => {
+        formLevel.validate();
+    });
+});
+
+// ── applyValidationResults ─────────────────────────────────────────────────
+
+for(const mode of ["bare", "subscribed"] as const) {
+    describe(`applyValidationResults – error on every cell, patch, by form size (${mode})`, () => {
+        for(const rows of SIZES) {
+            const form = createForm(rows, mode);
+            const results = cellResults(rows, ERROR);
+
+            bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
+                form.applyValidationResults(results);
+            });
+        }
+    });
+}
+
+for(const mode of ["bare", "subscribed"] as const) {
+    describe(`applyValidationResults – single cell, patch, by form size (${mode})`, () => {
+        for(const rows of SIZES) {
+            const form = createForm(rows, mode);
+            const results = new Map([[`rows[${Math.floor(rows / 2)}].cell3`, ERROR]]);
+
+            bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
+                form.applyValidationResults(results);
+            });
+        }
+    });
+}
+
+// Merge appends to the field's existing messages, so applying the same map
+// repeatedly would grow them without bound. Every mode therefore alternates
+// between an error on every cell and a cleared result on every cell.
+describe("applyValidationResults – mode at 1000 rows (subscribed)", () => {
+    const errors = cellResults(1_000, ERROR);
+    const cleared = cellResults(1_000, CLEARED);
+
+    for(const applyMode of ["patch", "merge", "replace"] as const) {
+        const form = createForm(1_000, "subscribed");
+        const options = { mode: applyMode };
+        let counter = 0;
+
+        bench(applyMode, () => {
+            form.applyValidationResults((counter++ & 1) === 0 ? errors : cleared, options);
+        });
+    }
+});
+
+describe("applyValidationResults – variants at 1000 rows (subscribed)", () => {
+    const formLevelForm = createForm(1_000, "subscribed");
+    const singleForm = createForm(1_000, "subscribed");
+    const everyCellForm = createForm(1_000, "subscribed");
+    const replaceEmptyForm = createForm(1_000, "subscribed");
+    const unknownForm = createForm(1_000, "bare");
+
+    const formLevel = new Map([["", ERROR]]);
+    const single = new Map([["rows[500].cell3", ERROR]]);
+    const everyCell = cellResults(1_000, ERROR);
+    const empty = new Map<string, IValidationResult>();
+    const ignoreOptions = { unknownFieldBehavior: "ignore" } as const;
+    const replaceOptions = { mode: "replace" } as const;
+
+    bench("form-level result only", () => {
+        formLevelForm.applyValidationResults(formLevel);
+    });
+
+    bench("single cell", () => {
+        singleForm.applyValidationResults(single);
+    });
+
+    bench("error on every cell", () => {
+        everyCellForm.applyValidationResults(everyCell);
+    });
+
+    bench("replace with an empty map (clears every field)", () => {
+        replaceEmptyForm.applyValidationResults(empty, replaceOptions);
+    });
+
+    bench("every cell unknown, ignored (no registered fields)", () => {
+        unknownForm.applyValidationResults(everyCell, ignoreOptions);
+    });
+});
+
+// ── reset ──────────────────────────────────────────────────────────────────
+
+// reset() leaves the form clean, so repeated calls measure a clean form: the
+// data clone, the per-field state reset and the unconditional notification of
+// every listener.
+for(const mode of ["bare", "subscribed"] as const) {
+    describe(`reset – clean form by form size (${mode})`, () => {
+        for(const rows of SIZES) {
+            const form = createForm(rows, mode);
+
+            bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
+                form.reset();
+            });
+        }
+    });
+}
+
+// The dirty/validated rows have to put that state back inside the bench, so
+// they include the cost of the preceding call; compare them with the matching
+// setFieldValue / applyValidationResults / validate groups.
+describe("reset – variants at 1000 rows (subscribed)", () => {
+    const cloneSource = createForm(1_000, "bare").getData();
+    const cleanForm = createForm(1_000, "subscribed");
+    const newDataForm = createForm(1_000, "subscribed");
+    const dirtyForm = createForm(1_000, "subscribed");
+    const appliedForm = createForm(1_000, "subscribed");
+    const validatedForm = createForm(1_000, "subscribed", "", createGridValidator());
+
+    const dataA: Grid = { title: "A", rows: createRows(1_000, "a") };
+    const dataB: Grid = { title: "B", rows: createRows(1_000, "b") };
+    const everyCell = cellResults(1_000, ERROR);
+    let counter = 0;
+
+    bench("structuredClone of the data alone (baseline)", () => {
+        structuredClone(cloneSource);
+    });
+
+    bench("reset() – clean form", () => {
+        cleanForm.reset();
+    });
+
+    bench("reset(data) – new initial data", () => {
+        newDataForm.reset((counter++ & 1) === 0 ? dataA : dataB);
+    });
+
+    bench("setFieldValue (leaf) + reset() – one dirty field", () => {
+        dirtyForm.setFieldValue("rows[500].cell3" as any, "changed");
+        dirtyForm.reset();
+    });
+
+    bench("applyValidationResults (every cell) + reset()", () => {
+        appliedForm.applyValidationResults(everyCell);
+        appliedForm.reset();
+    });
+
+    bench("validate (all cells invalid) + reset()", () => {
+        validatedForm.validate();
+        validatedForm.reset();
     });
 });

@@ -103,4 +103,4 @@ ratio should not be trusted without a rerun on an idle machine.
 | `setObjectValue.performance.bench.ts` | Mutable vs immutable writes, data-size scaling, redundant-write guard |
 | `removeObjectValue.performance.bench.ts` | Immutable removal vs `set(undefined)`, array splice position, data-size scaling |
 | `isEqual.performance.bench.ts` | Primitives, arrays, objects, dates, circular refs, `treatNullAsDefault` |
-| `kertyForm.performance.bench.ts` | `KertyForm.setFieldValue` / `prependItems` / `insertItems` by form size, with and without field listeners |
+| `kertyForm.performance.bench.ts` | `KertyForm.setFieldValue` / `prependItems` / `insertItems` / `validate` / `applyValidationResults` / `reset` by form size, with and without field listeners |
