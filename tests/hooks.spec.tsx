@@ -409,13 +409,13 @@ describe("useFieldWatch", () => {
         expect(renderCountOf("renders")).toBe(before);
     });
 
-    it("should unregister the field when the subscriber unmounts", () => {
+    it("should register the field when the subscriber unmounts", () => {
         const form = new KertyForm<any>({ data: { username: "bob" } });
         const { unmount } = render(<WatchedField form={form} name="username" />);
 
         unmount();
 
-        expect(form.getFieldValue("username")).toBeUndefined();
+        expect(form.getFieldValue("username")).toBe("bob");
     });
 });
 

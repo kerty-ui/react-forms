@@ -34,13 +34,6 @@ const defaultFormState = {
     isValidated: false,
 } as FormState;
 
-const defaultFieldState = {
-    isTouched: false,
-    isDirty: false,
-    isValid: true,
-    isValidated: false,
-} as FieldState;
-
 const defaultFieldSnapshot = {
     isTouched: false,
     isDirty: false,
@@ -161,23 +154,20 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
                 this.#fields.delete(name as string);
                 this.#invalidFields.delete(name as string);
-                this.#dirtyFields.delete(name as string);
+
+                const listenerOptions = new NotifyListenerOptions();
 
                 const formIsValid = this.#isFormValid();
-                const formIsDirty = this.#dirtyFields.size > 0;
 
-                if(this.#state.isValid !== formIsValid || this.#state.isDirty !== formIsDirty) {
+                if(this.#state.isValid !== formIsValid) {
                     this.#state = {
                         ...this.#state,
                         isValid: formIsValid,
-                        isDirty: formIsDirty,
                     };
-                    for(const listener of this.#listeners) {
-                        if(listener.listenStateChange) {
-                            listener.notify();
-                        }
-                    }
+                    listenerOptions.formStateChanged();
                 }
+
+                this.#notifyListeners(listenerOptions);
             }
         };
     }
@@ -255,16 +245,12 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     getFieldValue<TPath extends FieldPath<TData>>(name: TPath): FieldPathValue<TData, TPath> | undefined {
-        const field = this.#fields.get(name as string);
-        if(field == null) {
-            return undefined;
-        }
-
+        const field = this.#getField(name as string);
         return getObjectValue(this.#data, field.path);
     }
 
     getFieldState<TPath extends FieldPath<TData>>(name: TPath): FieldState {
-        return this.#fields.get(name as string)?.state ?? defaultFieldState;
+        return this.#getField(name as string).state;
     }
 
     setFieldValue<TValue>(name: FieldPathByValue<TData, TValue>, value: TValue | null | undefined, silent?: boolean): void;

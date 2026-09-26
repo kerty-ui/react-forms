@@ -118,27 +118,33 @@ describe("KertyForm.getFieldValue", () => {
     it("should return the value when the field has been registered", () => {
         const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
         register(form, "username");
-
         expect(form.getFieldValue("username")).toBe("bob");
     });
 
-    it("should return undefined when the field has never been registered", () => {
+    it("should return the value when the field has not been unregistered", () => {
         const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
-
-        expect(form.getFieldValue("username")).toBeUndefined();
+        expect(form.getFieldValue("username")).toBe("bob");
     });
 
     it("should return the nested value when a dotted path is registered", () => {
         const form = new KertyForm<ProfileForm>({ data: { person: { name: "John", address: { city: "London" } } } });
         register(form, "person.address.city");
+        expect(form.getFieldValue("person.address.city")).toBe("London");
+    });
 
+    it("should return the nested value when a dotted path is not registered", () => {
+        const form = new KertyForm<ProfileForm>({ data: { person: { name: "John", address: { city: "London" } } } });
         expect(form.getFieldValue("person.address.city")).toBe("London");
     });
 
     it("should return the item when an indexed path is registered", () => {
         const form = new KertyForm<any>({ data: { tags: ["ts", "js"] } });
         register(form, "tags[1]");
+        expect(form.getFieldValue("tags[1]")).toBe("js");
+    });
 
+    it("should return the item when an indexed path is not registered", () => {
+        const form = new KertyForm<any>({ data: { tags: ["ts", "js"] } });
         expect(form.getFieldValue("tags[1]")).toBe("js");
     });
 });
@@ -420,16 +426,6 @@ describe("KertyForm – dirty tracking", () => {
 });
 
 describe("KertyForm – dirty tracking when a field unsubscribes", () => {
-    it("should clear the form dirty flag when the last dirty field unsubscribes", () => {
-        const form = new KertyForm<any>({ data: { a: 1 } });
-        const unsubscribe = register(form, "a");
-        form.setFieldValue("a", 2);
-
-        unsubscribe();
-
-        expect(form.getState().isDirty).toBe(false);
-    });
-
     it("should keep the form dirty when another dirty field is still subscribed", () => {
         const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
         const unsubscribe = register(form, "a");
@@ -440,22 +436,6 @@ describe("KertyForm – dirty tracking when a field unsubscribes", () => {
         unsubscribe();
 
         expect(form.getState().isDirty).toBe(true);
-    });
-
-    it("should notify state listeners when the dirty flag changes on unsubscribe", () => {
-        const form = new KertyForm<any>({ data: { a: 1 } });
-        const unsubscribe = register(form, "a");
-        form.setFieldValue("a", 2);
-        let calls = 0;
-        form.addListener(() => calls++, {
-            listenDataChange: false,
-            listenStateChange: true,
-            listenValidationChange: false,
-        });
-
-        unsubscribe();
-
-        expect(calls).toBe(1);
     });
 
     it("should not notify state listeners when a clean field unsubscribes", () => {

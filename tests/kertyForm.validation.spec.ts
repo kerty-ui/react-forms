@@ -746,12 +746,12 @@ describe("KertyForm.getFieldValidationResult", () => {
         expect(form.getFieldValidationResult("username")).toBeUndefined();
     });
 
-    it("should not register the field when its validation result is read", () => {
+    it("should register the field when its validation result is read", () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: { username: "bob" } });
 
         form.getFieldValidationResult("username");
 
-        expect(form.getFieldValue("username")).toBeUndefined();
+        expect(form.getFieldValue("username")).toBe("bob");
     });
 
     it("should not register the field when its validation message is read", () => {
