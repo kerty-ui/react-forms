@@ -6,6 +6,7 @@ import {
     FormField,
     FormProvider,
     FormValidationResult,
+    KertyForm,
     Severity,
     SingleMessageDrivenValidator,
     ValidationResult,
@@ -13,6 +14,7 @@ import {
     useField,
     useFieldState,
     useFieldValue,
+    useFieldWatch,
     useForm,
     useFormContext,
     useFormValidationResult,
@@ -315,6 +317,105 @@ describe("useFieldValue", () => {
         act(() => form.current.setFieldValue("username", "bob"));
 
         expect(screen.getByTestId("value").textContent).toBe("bob");
+    });
+});
+
+describe("useFieldWatch", () => {
+    const WatchedField = ({ form, name }: { form: IKertyForm<any>; name: string }) => {
+        const field = useFieldWatch<string>(form, name);
+        return (
+            <>
+                <RenderCount testId="renders" />
+                <span data-testid="value">{field.value ?? ""}</span>
+                <span data-testid="dirty">{String(field.isDirty)}</span>
+                <span data-testid="message">{field.validationResult?.messages[0]?.text ?? ""}</span>
+            </>
+        );
+    };
+
+    it("should return the initial field value when first rendered", () => {
+        const form = new KertyForm<any>({ data: { username: "bob" } });
+
+        render(<WatchedField form={form} name="username" />);
+
+        expect(screen.getByTestId("value").textContent).toBe("bob");
+    });
+
+    it("should expose the new value when the field changes", () => {
+        const form = new KertyForm<any>({ data: { username: "bob" } });
+        render(<WatchedField form={form} name="username" />);
+
+        act(() => form.setFieldValue("username", "alice"));
+
+        expect(screen.getByTestId("value").textContent).toBe("alice");
+    });
+
+    it("should expose the field state when the field becomes dirty", () => {
+        const form = new KertyForm<any>({ data: { username: "bob" } });
+        render(<WatchedField form={form} name="username" />);
+
+        act(() => form.setFieldValue("username", "alice"));
+
+        expect(screen.getByTestId("dirty").textContent).toBe("true");
+    });
+
+    it("should expose the field validation result when one is applied", () => {
+        const form = new KertyForm<any>({ data: {} });
+        render(<WatchedField form={form} name="username" />);
+
+        act(() => form.applyFieldValidationResult("username", new ValidationResult().add({ text: "Taken" })));
+
+        expect(screen.getByTestId("message").textContent).toBe("Taken");
+    });
+
+    it("should not re-render the subscriber when a sibling field changes", () => {
+        const form = new KertyForm<any>({ data: { username: "bob" } });
+        render(<WatchedField form={form} name="username" />);
+        const before = renderCountOf("renders");
+
+        act(() => form.setFieldValue("password", "pw"));
+
+        expect(renderCountOf("renders")).toBe(before);
+    });
+
+    it("should not re-render the subscriber when the field is set to the same value", () => {
+        const form = new KertyForm<any>({ data: { username: "bob" } });
+        render(<WatchedField form={form} name="username" />);
+        act(() => form.setFieldValue("username", "alice"));
+        const before = renderCountOf("renders");
+
+        act(() => form.setFieldValue("username", "alice"));
+
+        expect(renderCountOf("renders")).toBe(before);
+    });
+
+    it("should watch the new field when the name prop changes", () => {
+        const form = new KertyForm<any>({ data: { username: "bob", password: "pw" } });
+        const { rerender } = render(<WatchedField form={form} name="username" />);
+
+        rerender(<WatchedField form={form} name="password" />);
+
+        expect(screen.getByTestId("value").textContent).toBe("pw");
+    });
+
+    it("should stop re-rendering for the old field when the name prop changes", () => {
+        const form = new KertyForm<any>({ data: { username: "bob", password: "pw" } });
+        const { rerender } = render(<WatchedField form={form} name="username" />);
+        rerender(<WatchedField form={form} name="password" />);
+        const before = renderCountOf("renders");
+
+        act(() => form.setFieldValue("username", "alice"));
+
+        expect(renderCountOf("renders")).toBe(before);
+    });
+
+    it("should unregister the field when the subscriber unmounts", () => {
+        const form = new KertyForm<any>({ data: { username: "bob" } });
+        const { unmount } = render(<WatchedField form={form} name="username" />);
+
+        unmount();
+
+        expect(form.getFieldValue("username")).toBeUndefined();
     });
 });
 

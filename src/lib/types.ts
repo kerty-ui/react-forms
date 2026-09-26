@@ -18,7 +18,47 @@ export interface IValidationResult {
     readonly messages: readonly ValidationMessage[];
 }
 
-export type ValidatorMode = "messageDriven" | "fieldDriven";
+export type ValidatorMode =
+    /**
+     * Message-driven validation.
+     *
+     * Before validation, the form clears all existing validation messages.
+     * The validator only needs to return fields that currently have a
+     * validation message. Fields that are not returned remain message-free.
+     */
+    | "messageDriven"
+
+    /**
+     * Field-driven validation.
+     *
+     * When validating a changed field, the validator must return every field
+     * whose validation state may have been affected, including fields that are
+     * currently valid.
+     *
+     * A returned field without a message clears its previous validation
+     * message. A field that is not returned is not modified by the form.
+     */
+    | "fieldDriven";
+
+export type ApplyValidationResultMode =
+    /**
+     * - `patch`
+     *   Applies the validation result as a partial update. Only fields included
+     *   in the result are changed; messages for all other fields remain unchanged.
+     */
+    | "patch"
+    /**
+     * - `merge`
+     *   Keeps all existing validation messages and adds the messages provided
+     *   by the current validation result. Existing messages are preserved.
+     */
+    | "merge"
+    /**
+     * - `replace`
+     *   Removes all existing validation messages and then adds
+     *   the messages provided by the current validation result.
+     */
+    | "replace";
 
 export interface IValidator<TData> {
     mode: ValidatorMode;
@@ -36,6 +76,25 @@ export type ValidationContext<TData, TValue> = {
     data: TData;
     parent: any | undefined;
     value: TValue | undefined;
+}
+
+export type ApplyValidationOptions = {
+    mode?: ApplyValidationResultMode;
+    /**
+     * Controls how validation results for fields that are not registered in the
+     * form are handled.
+     *
+     * - `ignore`
+     *   Ignores validation results for unregistered fields. The fields are not
+     *   added to the form and their messages are not applied.
+     *
+     * - `add`
+     *   Adds unregistered fields to the form and applies their validation
+     *   results. Use this only when the form can safely represent and update
+     *   those fields, because an unregistered field may produce a validation
+     *   error that the user cannot fix through the form UI.
+     */
+    unknownFieldBehavior?: "ignore" | "add";
 }
 
 type IsAny<T> = 0 extends (1 & T) ? true : false;
@@ -152,10 +211,6 @@ export type FormValidateResult = {
     invalidFields: Set<string>;
 }
 
-export type ApplyValidationOptions = {
-    mode?: "replace" | "patch";
-}
-
 export type ObjectData = object & { [Symbol.iterator]?: never };
 
 export type FieldPathPart = {
@@ -209,20 +264,13 @@ export type FormOptions<TData> = FormConfig & {
 }
 
 export type FormListenerOptions = {
-
     listenDataChange: boolean;
-
     listenStateChange: boolean;
-
     listenValidationChange: boolean;
-
-    listenFieldValidationChange: boolean;
+    fieldName?: string;
 }
 
 export type FormListener = FormListenerOptions & {
-
-    fieldName?: string;
-
     notify: () => void;
 }
 
@@ -231,23 +279,21 @@ interface IFormValidation<TData> {
     setValidator(validator: IValidator<TData>): void;
 
     validate(ruleSet?: string | null): FormValidateResult;
-    
-    applyValidationResult(
-        result: IValidationResult,
-        options?: ApplyValidationOptions
-    ): void;
-    
+
+    applyValidationResult(result: IValidationResult, options?: ApplyValidationOptions): void;
+
     applyFieldValidationResult<TPath extends FieldPath<TData>>(
         name: TPath,
         result: IValidationResult,
         options?: ApplyValidationOptions
     ): void;
 
-    applyValidationResults(
-        validationResults: Map<string, IValidationResult>,
-        options?: ApplyValidationOptions
-    ): void;
-    
+    applyValidationResults(validationResults: Map<string, IValidationResult>, options?: ApplyValidationOptions): void;
+
+    resetValidationResults(): void;
+
+    resetFieldValidationResults<TPath extends FieldPath<TData>>(name: TPath | TPath[]): void;
+
     getValidationResult(): IValidationResult | undefined;
 
     getValidationMessage(): ValidationMessage | undefined;
@@ -256,7 +302,7 @@ interface IFormValidation<TData> {
     
     getFieldValidationMessage<TPath extends FieldPath<TData>>(name: TPath): ValidationMessage | undefined;
     
-    resetValidationResults(fields?: string | string[]): void;
+
 }
 
 interface IFormArrayActions<TData> {
@@ -310,7 +356,7 @@ interface IFormArrayActions<TData> {
 
 export interface IKertyForm<TData> extends IFormValidation<TData>, IFormArrayActions<TData> {
     updateConfiguration(config: FormConfig): void;
-    addListener(listener: () => void, options?: FormListenerOptions): () => void;
+    addListener(listener: () => void, options?: Omit<FormListenerOptions, 'fieldName'> ): () => void;
     addFieldListener<TPath extends FieldPath<TData>>(name: TPath, listener: () => void): () => void;
     getData(): TData;
     getState(): FormState;

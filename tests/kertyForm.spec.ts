@@ -223,6 +223,114 @@ describe("KertyForm.setFieldValue", () => {
     });
 });
 
+describe("KertyForm.clearFieldValue", () => {
+    it("should set the value to undefined when called", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+
+        form.clearFieldValue("username");
+
+        expect(form.getData().username).toBeUndefined();
+    });
+
+    it("should keep the property key when the value is cleared", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+
+        form.clearFieldValue("username");
+
+        expect(Object.keys(form.getData())).toEqual(["username", "password"]);
+    });
+
+    it("should clear every field when a list of names is given", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+
+        form.clearFieldValue(["username", "password"]);
+
+        expect(form.getData()).toEqual({ username: undefined, password: undefined });
+    });
+
+    it("should mark the form dirty when a field with an initial value is cleared", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+        register(form, "username");
+
+        form.clearFieldValue("username");
+
+        expect(form.getState().isDirty).toBe(true);
+    });
+
+    it("should notify the field listener when the value is cleared", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+        let calls = 0;
+        form.addFieldListener("username", () => { calls++; });
+
+        form.clearFieldValue("username");
+
+        expect(calls).toBe(1);
+    });
+
+    it("should not notify the field listener when called in silent mode", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+        let calls = 0;
+        form.addFieldListener("username", () => { calls++; });
+
+        form.clearFieldValue("username", true);
+
+        expect(calls).toBe(0);
+    });
+});
+
+describe("KertyForm.removeFieldValue", () => {
+    it("should delete the property when called", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+
+        form.removeFieldValue("username");
+
+        expect(Object.keys(form.getData())).toEqual(["password"]);
+    });
+
+    it("should delete a nested property without touching its siblings when a nested path is given", () => {
+        const form = new KertyForm<any>({ data: { person: { name: "John", age: 30 } } });
+
+        form.removeFieldValue("person.age");
+
+        expect(form.getData()).toEqual({ person: { name: "John" } });
+    });
+
+    it("should remove the array item when the path targets an item", () => {
+        const form = new KertyForm<any>({ data: { items: ["a", "b", "c"] } });
+
+        form.removeFieldValue("items[1]");
+
+        expect(form.getData().items).toEqual(["a", "c"]);
+    });
+
+    it("should remove every field when a list of names is given", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+
+        form.removeFieldValue(["username", "password"]);
+
+        expect(form.getData()).toEqual({});
+    });
+
+    it("should mark the form dirty when a field with an initial value is removed", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+        register(form, "username");
+
+        form.removeFieldValue("username");
+
+        expect(form.getState().isDirty).toBe(true);
+    });
+
+    it("should not notify the field listener when called in silent mode", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+        let calls = 0;
+        form.addFieldListener("username", () => { calls++; });
+
+        form.removeFieldValue("username", true);
+
+        expect(calls).toBe(0);
+    });
+});
+
 describe("KertyForm – dirty tracking", () => {
     it("should mark the form dirty when a field moves away from its initial value", () => {
         const form = new KertyForm<any>({ data: { a: 1 } });
@@ -343,7 +451,6 @@ describe("KertyForm – dirty tracking when a field unsubscribes", () => {
             listenDataChange: false,
             listenStateChange: true,
             listenValidationChange: false,
-            listenFieldValidationChange: false,
         });
 
         unsubscribe();
@@ -359,7 +466,6 @@ describe("KertyForm – dirty tracking when a field unsubscribes", () => {
             listenDataChange: false,
             listenStateChange: true,
             listenValidationChange: false,
-            listenFieldValidationChange: false,
         });
 
         unsubscribe();

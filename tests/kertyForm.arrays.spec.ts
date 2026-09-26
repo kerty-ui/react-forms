@@ -264,6 +264,41 @@ describe("KertyForm.removeItems", () => {
     });
 });
 
+describe("KertyForm – silent array mutations", () => {
+    it.each([
+        ["prependItems", (form: KertyForm<ListForm>) => form.prependItems("items", "z", true), ["z", "a", "b", "c"]],
+        ["insertItems", (form: KertyForm<ListForm>) => form.insertItems("items", 1, "z", true), ["a", "z", "b", "c"]],
+        ["removeItems", (form: KertyForm<ListForm>) => form.removeItems("items", 1, true), ["a", "c"]],
+        ["swapItem", (form: KertyForm<ListForm>) => form.swapItem("items", 0, 2, true), ["c", "b", "a"]],
+        ["moveItem", (form: KertyForm<ListForm>) => form.moveItem("items", 0, 2, true), ["b", "c", "a"]],
+        ["updateItem", (form: KertyForm<ListForm>) => form.updateItem("items", 1, "z", true), ["a", "z", "c"]],
+    ] as const)("should still write the data when %s is called in silent mode", (_, mutate, expected) => {
+        const form = listForm();
+
+        mutate(form);
+
+        expect(form.getData().items).toEqual(expected);
+    });
+
+    it.each([
+        ["prependItems", (form: KertyForm<ListForm>) => form.prependItems("items", "z", true)],
+        ["insertItems", (form: KertyForm<ListForm>) => form.insertItems("items", 1, "z", true)],
+        ["removeItems", (form: KertyForm<ListForm>) => form.removeItems("items", 1, true)],
+        ["swapItem", (form: KertyForm<ListForm>) => form.swapItem("items", 0, 2, true)],
+        ["moveItem", (form: KertyForm<ListForm>) => form.moveItem("items", 0, 2, true)],
+        ["updateItem", (form: KertyForm<ListForm>) => form.updateItem("items", 1, "z", true)],
+    ] as const)("should not notify listeners when %s is called in silent mode", (_, mutate) => {
+        const form = listForm();
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
+        form.addListener(listener);
+
+        mutate(form);
+
+        expect(count.calls).toBe(0);
+    });
+});
+
 describe("KertyForm.swapItem", () => {
     it("should exchange the two items when valid indices are given", () => {
         const form = listForm();

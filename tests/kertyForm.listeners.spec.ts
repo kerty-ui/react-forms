@@ -5,21 +5,18 @@ const dataOnly: FormListenerOptions = {
     listenDataChange: true,
     listenStateChange: false,
     listenValidationChange: false,
-    listenFieldValidationChange: false,
 };
 
 const stateOnly: FormListenerOptions = {
     listenDataChange: false,
     listenStateChange: true,
     listenValidationChange: false,
-    listenFieldValidationChange: false,
 };
 
 const formValidationOnly: FormListenerOptions = {
     listenDataChange: false,
     listenStateChange: false,
     listenValidationChange: true,
-    listenFieldValidationChange: false,
 };
 
 const counter = () => {

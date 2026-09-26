@@ -10,7 +10,6 @@ export const useStateWatch = <TDataModel,TValue,>(
             listenDataChange: false,
             listenStateChange: true,
             listenValidationChange: false,
-            listenFieldValidationChange: false,
         }),
         [form]);
     const getStateSnapshot = useMemo(() => form.getStateSnapshot<TValue>(getValue), [form]);

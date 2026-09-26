@@ -10,7 +10,6 @@ export const useDataWatch = <TDataModel,TValue,>(
             listenDataChange: true,
             listenStateChange: false,
             listenValidationChange: false,
-            listenFieldValidationChange: false,
         }),
         [form]
     );

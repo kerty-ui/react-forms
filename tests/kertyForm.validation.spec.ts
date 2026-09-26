@@ -35,6 +35,13 @@ const mountedForm = (validator?: any, data: Partial<LoginForm> = {}) => {
 };
 
 const error = (text: string) => new ValidationResult().add({ text, severity: Severity.Error });
+const warning = (text: string) => new ValidationResult().add({ text, severity: Severity.Warning });
+
+/** A validator that always reports the given form-level result. */
+const formLevelValidator = (result: ValidationResult) => ({
+    mode: "fieldDriven" as const,
+    validate: () => new Map([["", result]]),
+});
 
 // ─── validate ────────────────────────────────────────────────────────────────
 
@@ -116,6 +123,37 @@ describe("KertyForm.validate", () => {
         form.validate();
 
         expect([...first.invalidFields].sort()).toEqual(["password", "username"]);
+    });
+
+    it("should expose the form-level result when the validator reports one under the empty key", () => {
+        const form = mountedForm(formLevelValidator(error("Login failed")));
+
+        form.validate();
+
+        expect(form.getValidationMessage()?.text).toBe("Login failed");
+    });
+
+    it("should report the form as invalid when the validator reports a form-level error", () => {
+        const form = mountedForm(formLevelValidator(error("Login failed")));
+
+        expect(form.validate().isValid).toBe(false);
+    });
+
+    it("should ignore an empty form-level result when the validator reports one", () => {
+        const form = mountedForm(formLevelValidator(new ValidationResult()));
+
+        form.validate();
+
+        expect(form.getValidationResult()).toBeUndefined();
+    });
+
+    it("should drop a previously applied form result when validation runs again", () => {
+        const form = mountedForm(requiredLoginValidator(), { username: "bob", password: "pw" });
+        form.applyValidationResult(error("Login failed"));
+
+        form.validate();
+
+        expect(form.getValidationResult()).toBeUndefined();
     });
 });
 
@@ -572,20 +610,20 @@ describe("KertyForm.applyValidationResult", () => {
         expect(form.getValidationResult()?.messages.map(m => m.text)).toEqual(["Second"]);
     });
 
-    it("should keep both results when applied in patch mode", () => {
+    it("should keep both results when applied in merge mode", () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: {} });
         form.applyValidationResult(error("First"));
 
-        form.applyValidationResult(error("Second"), { mode: "patch" });
+        form.applyValidationResult(error("Second"), { mode: "merge" });
 
         expect(form.getValidationResult()?.messages.map(m => m.text)).toEqual(["First", "Second"]);
     });
 
-    it("should ignore the call when the result carries no messages", () => {
+    it("should ignore the call when the result carries no messages in merge mode", () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: {} });
         form.applyValidationResult(error("First"));
 
-        form.applyValidationResult(new ValidationResult());
+        form.applyValidationResult(new ValidationResult(), { mode: "merge" });
 
         expect(form.getValidationMessage()?.text).toBe("First");
     });
@@ -637,16 +675,17 @@ describe("KertyForm.applyFieldValidationResult", () => {
     it("should ignore the call when the field was never registered", () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: {} });
 
-        form.applyFieldValidationResult("username", error("Taken"));
+        form.applyFieldValidationResult("username", error("Taken"), {
+            unknownFieldBehavior: "ignore"
+        });
 
         expect(form.getState().isValid).toBe(true);
     });
 
-    it("should keep both messages when applied in patch mode", () => {
+    it("should keep both messages when applied in merge mode", () => {
         const form = mountedForm();
         form.applyFieldValidationResult("username", error("First"));
-
-        form.applyFieldValidationResult("username", error("Second"), { mode: "patch" });
+        form.applyFieldValidationResult("username", error("Second"), { mode: "merge" });
 
         expect(form.getFieldValidationResult("username")?.messages.map(m => m.text)).toEqual(["First", "Second"]);
     });
@@ -773,47 +812,73 @@ describe("KertyForm.applyValidationResults", () => {
 
     it("should clear previous field results when applied in replace mode", () => {
         const form = mountedForm();
-        form.applyValidationResults(new Map([["username", error("Taken")]]));
+        form.applyValidationResults(new Map([["username", error("Taken")]]), { mode: "replace" });
 
-        form.applyValidationResults(new Map([["password", error("Too short")]]));
+        form.applyValidationResults(new Map([["password", error("Too short")]]), { mode: "replace" });
 
         expect(form.getFieldValidationMessage("username")).toBeUndefined();
     });
 
-    it("should keep previous field results when applied in patch mode", () => {
+    it("should keep previous field results when applied in merge mode", () => {
         const form = mountedForm();
         form.applyValidationResults(new Map([["username", error("Taken")]]));
 
-        form.applyValidationResults(new Map([["password", error("Too short")]]), { mode: "patch" });
+        form.applyValidationResults(new Map([["password", error("Too short")]]), { mode: "merge" });
 
         expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
     });
 
-    it("should clear a field result when the map holds an empty result for it in patch mode", () => {
+    it("should clear a field result when the map holds an empty result for it in merge mode", () => {
         const form = mountedForm();
         form.applyValidationResults(new Map([["username", error("Taken")]]));
 
-        form.applyValidationResults(new Map([["username", new ValidationResult()]]), { mode: "patch" });
+        form.applyValidationResults(new Map([["username", new ValidationResult()]]), { mode: "merge" });
 
         expect(form.getFieldValidationMessage("username")).toBeUndefined();
     });
 
-    it("should make the form valid again when every field result is cleared in patch mode", () => {
+    it("should make the form valid again when every field result is cleared in merge mode", () => {
         const form = mountedForm();
         form.applyValidationResults(new Map([["username", error("Taken")]]));
 
-        form.applyValidationResults(new Map([["username", new ValidationResult()]]), { mode: "patch" });
+        form.applyValidationResults(new Map([["username", new ValidationResult()]]), { mode: "merge" });
 
         expect(form.getState().isValid).toBe(true);
     });
 
-    it("should leave the form untouched when an empty map is applied in patch mode", () => {
+    it("should leave the form untouched when an empty map is applied in merge mode", () => {
         const form = mountedForm();
         form.applyValidationResults(new Map([["username", error("Taken")]]));
 
-        form.applyValidationResults(new Map(), { mode: "patch" });
+        form.applyValidationResults(new Map(), { mode: "merge" });
 
         expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
+    });
+
+    it("should clear the previous form result when applied in replace mode", () => {
+        const form = mountedForm();
+        form.applyValidationResult(error("Login failed"));
+
+        form.applyValidationResults(new Map([["username", error("Taken")]]), { mode: "replace" });
+
+        expect(form.getValidationResult()).toBeUndefined();
+    });
+
+    it("should keep the field valid when only a warning is applied to it", () => {
+        const form = mountedForm();
+
+        form.applyValidationResults(new Map([["username", warning("Weak")]]));
+
+        expect(form.getFieldState("username")).toMatchObject({ isValid: true, isValidated: true });
+    });
+
+    it("should make the form valid again when a field error is patched with a warning", () => {
+        const form = mountedForm();
+        form.applyValidationResults(new Map([["username", error("Taken")]]));
+
+        form.applyValidationResults(new Map([["username", warning("Weak")]]));
+
+        expect(form.getState().isValid).toBe(true);
     });
 });
 
@@ -858,7 +923,7 @@ describe("KertyForm.resetValidationResults", () => {
         const form = mountedForm(requiredLoginValidator());
         form.validate();
 
-        form.resetValidationResults("username");
+        form.resetFieldValidationResults("username");
 
         expect(form.getFieldValidationMessage("password")?.text).toBe("Password is required");
     });
@@ -867,7 +932,7 @@ describe("KertyForm.resetValidationResults", () => {
         const form = mountedForm(requiredLoginValidator());
         form.validate();
 
-        form.resetValidationResults("username");
+        form.resetFieldValidationResults("username");
 
         expect(form.getFieldValidationMessage("username")).toBeUndefined();
     });
@@ -876,7 +941,7 @@ describe("KertyForm.resetValidationResults", () => {
         const form = mountedForm(requiredLoginValidator());
         form.validate();
 
-        form.resetValidationResults(["username", "password"]);
+        form.resetFieldValidationResults(["username", "password"]);
 
         expect(form.getState().isValid).toBe(true);
     });
@@ -885,7 +950,7 @@ describe("KertyForm.resetValidationResults", () => {
         const form = mountedForm(requiredLoginValidator());
         form.applyValidationResult(error("Login failed"));
 
-        form.resetValidationResults("username");
+        form.resetFieldValidationResults("username");
 
         expect(form.getValidationMessage()?.text).toBe("Login failed");
     });

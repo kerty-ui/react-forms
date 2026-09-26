@@ -31,13 +31,27 @@ export class ValidationResult implements IValidationResult {
             : (this.#severityMask & severity) === severity;
     }
 
-    merge(result: IValidationResult): ValidationResult {
+    merge(result: IValidationResult | null | undefined): ValidationResult {
         if (result == null || result.messages.length === 0) {
             return this;
         }
 
         for (const m of result.messages) {
             this.add(m);
+        }
+
+        return this;
+    }
+
+    replace(result: IValidationResult | null | undefined): ValidationResult {
+
+        this.messages = [];
+        this.#severityMask = Severity.None;
+
+        if (result != null && result.messages.length > 0) {
+            for (const m of result.messages) {
+                this.add(m);
+            }
         }
 
         return this;

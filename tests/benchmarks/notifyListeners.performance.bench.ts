@@ -1,5 +1,5 @@
 import { bench, describe } from "vitest";
-import { KertyForm } from "../../src/lib/kertyForm";
+import { KertyForm } from "../../src/lib";
 
 type Grid = { rows: Record<string, string>[] };
 

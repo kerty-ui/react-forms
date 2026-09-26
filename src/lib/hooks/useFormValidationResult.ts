@@ -6,7 +6,6 @@ export const useFormValidationResult = <TData,>(form: IKertyForm<TData>) => {
         listenDataChange: false,
         listenStateChange: false,
         listenValidationChange: true,
-        listenFieldValidationChange: false,
     }), [form]);
     const getValidationResult = useMemo(() => () => form.getValidationResult(), [form]);
     return useSyncExternalStore(subscribe, getValidationResult);
