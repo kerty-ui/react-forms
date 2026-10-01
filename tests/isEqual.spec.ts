@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { isEqual } from "../src/lib/utils/isEqual";
 
+class Point {
+    constructor(public x: number, public y: number) { }
+}
+
 describe("isEqual - primitives", () => {
     it("should return true for identical numbers", () => {
         expect(isEqual(42, 42)).toBe(true);

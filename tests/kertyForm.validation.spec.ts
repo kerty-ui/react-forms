@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { KertyForm } from "../src/lib/kertyForm";
 import { FieldValidations, Validator } from "../src/lib/validation/validator";
 import { SingleMessageDrivenValidator } from "../src/lib/validation/singleMessageDrivenValidator";
+import { ValidatorBuilder } from "../src/lib/validation/validatorBuilder";
 import { ValidationResult } from "../src/lib/validation/validationResult";
 import { Validations } from "../src/lib/validation/validations";
-import { Severity } from "../src/lib/types";
+import { Severity, type FieldPath } from "../src/lib/types";
 
 type LoginForm = {
     username: string;
@@ -214,6 +215,29 @@ describe("KertyForm – fieldDriven revalidation on change", () => {
 
         expect(form.getState().isValid).toBe(true);
     });
+
+    it("should not throw when the validator returns a form-level result while a changed field is revalidated", () => {
+        const form = mountedForm(formLevelValidator(error("Login failed")));
+        form.validate();
+
+        expect(() => form.setFieldValue("username", "bob")).not.toThrow();
+    });
+
+    it("should not apply a form-level result when a changed field is revalidated", () => {
+        const form = mountedForm(formLevelValidator(error("Login failed")));
+        form.validate();
+
+        form.setFieldValue("username", "bob");
+
+        expect(form.getValidationResult()).toBeUndefined();
+    });
+
+    it("should not throw when a field mounts after validate and the validator returns a form-level result", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator: formLevelValidator(error("Login failed")) });
+        form.validate();
+
+        expect(() => form.addFieldListener("username", () => { })).not.toThrow();
+    });
 });
 
 // ─── on-change revalidation after a passing validate ─────────────────────────
@@ -400,6 +424,51 @@ describe("KertyForm – fieldDriven revalidation of array item fields", () => {
     });
 });
 
+// ─── validation of primitive array items ─────────────────────────────────────
+
+describe("KertyForm – fieldDriven validation of primitive array items", () => {
+    const numbersForm = (numbers: number[]) => {
+        const form = new KertyForm<any>({
+            data: { numbers },
+            validator: new Validator<any>({
+                numbers: [new FieldValidations({ check: (ctx: any) => ctx.value === 2, message: "number two is not allowed" })],
+            }),
+        });
+        numbers.forEach((_, index) => form.addFieldListener(`numbers[${index}]`, () => { }));
+        return form;
+    };
+
+    it("should report the message on the item when its value fails the rule", () => {
+        const form = numbersForm([1, 2, 3]);
+
+        form.validate();
+
+        expect(form.getFieldValidationMessage("numbers[1]")?.text).toBe("number two is not allowed");
+    });
+
+    it.each(["numbers[0]", "numbers[2]"])("should not report a message on %s when its value passes the rule", (fieldName) => {
+        const form = numbersForm([1, 2, 3]);
+
+        form.validate();
+
+        expect(form.getFieldValidationMessage(fieldName)).toBeUndefined();
+    });
+
+    it("should attach the message to the failing primitive item when the builder rule checks the item value", () => {
+        const form = new KertyForm<{ numbers: number[] }>({
+            data: { numbers: [1, 2, 3] },
+            validator: new ValidatorBuilder<{ numbers: number[] }>()
+                .setup((b) => b.validationFor("numbers[]").add({ check: (ctx) => ctx.value === 2, message: "number two is not allowed" }))
+                .build(),
+        });
+
+        const result = form.validate();
+
+        expect([...result.invalidFields]).toEqual(["numbers[1]"]);
+        expect(form.getFieldValidationMessage("numbers[1]")?.text).toBe("number two is not allowed");
+    });
+});
+
 // ─── on-change revalidation after array mutations ────────────────────────────
 
 /*
@@ -527,6 +596,58 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
         form.updateItem("items", 0, { name: "" });
 
         expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+    });
+});
+
+// ─── orphaned item fields after removing earlier items ───────────────────────
+
+/*
+ * Regression tests for problems.md, C1. Removing an item shifts the data down, so
+ * the validation state of the fields at the old last indexes must not stay behind:
+ * the validator only returns results for items that still exist, and nothing else
+ * would clear the orphaned error.
+ */
+describe("KertyForm – fieldDriven validation of orphaned item fields after removeItems", () => {
+    const gridForm = (items: { name: string }[]) => {
+        const form = new KertyForm<any>({
+            data: { items },
+            validator: new Validator<any>({
+                items: [{ _name: new FieldValidations({ check: isTextEmpty, message: "Name is required" }) }],
+            }),
+        });
+        items.forEach((_, index) => form.addFieldListener(`items[${index}].name`, () => { }));
+        return form;
+    };
+
+    it("should clear the message of the orphaned last index when an earlier item is removed", () => {
+        const form = gridForm([{ name: "John" }, { name: "Jane" }, { name: "" }]);
+        form.validate();
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldValidationMessage("items[2].name")).toBeUndefined();
+    });
+
+    it("should mark the orphaned last index as valid when an earlier item is removed", () => {
+        const form = gridForm([{ name: "John" }, { name: "Jane" }, { name: "" }]);
+        form.validate();
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldState("items[2].name").isValid).toBe(true);
+    });
+
+    it.each([
+        { label: "one earlier item", removed: 0, correctedField: "items[1].name" },
+        { label: "two earlier items", removed: [0, 1], correctedField: "items[0].name" },
+    ])("should make the form valid when the shifted failing item is corrected after removing $label", ({ removed, correctedField }) => {
+        const form = gridForm([{ name: "John" }, { name: "Jane" }, { name: "" }]);
+        form.validate();
+        form.removeItems("items", removed);
+
+        form.setFieldValue(correctedField, "Joe");
+
+        expect(form.getState().isValid).toBe(true);
     });
 });
 
@@ -765,7 +886,7 @@ describe("KertyForm.getFieldValidationResult", () => {
     it("should return undefined when the field name is not a valid path", () => {
         const form = new KertyForm<any>({ data: { username: "bob" } });
 
-        expect(form.getFieldValidationResult("not a path")).toBeUndefined();
+        expect(() => form.getFieldValidationResult("not a path")).toThrowErrorMatchingSnapshot("Invalid field path: empty spaces are not allowed");
     });
 
     it("should return the result when the validator reported on a field with no listener", () => {
@@ -1004,5 +1125,320 @@ describe("KertyForm.setValidator", () => {
         form.setValidator(undefined);
 
         expect(form.validate().isValid).toBe(false);
+    });
+});
+
+type OrderForm = {
+    items: { name: string }[];
+};
+
+const formWithFailingItemName = (registeredFields: FieldPath<OrderForm>[]) => {
+    const form = new KertyForm<OrderForm>({ data: { items: [{ name: "" }] } });
+    registeredFields.forEach((fieldName) => form.addFieldListener(fieldName, () => { }));
+    form.applyFieldValidationResult("items[0].name", error("Name is required"));
+    return form;
+};
+
+const clearingOperations = [
+    { operation: "reset()", clear: (form: KertyForm<OrderForm>) => form.reset() },
+    { operation: "resetValidationResults()", clear: (form: KertyForm<OrderForm>) => form.resetValidationResults() },
+    {
+        operation: "applyValidationResults() in replace mode",
+        clear: (form: KertyForm<OrderForm>) => form.applyValidationResults(new Map(), { mode: "replace" }),
+    },
+];
+
+describe("KertyForm – clearing validation of fields inside an array item", () => {
+    it.each(clearingOperations)("should clear the item field message when $operation runs and only the item field is registered", ({ clear }) => {
+        const form = formWithFailingItemName(["items[0].name"]);
+
+        clear(form);
+
+        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+    });
+
+    it.each(clearingOperations)("should clear the item field message when $operation runs and the item itself is registered too", ({ clear }) => {
+        const form = formWithFailingItemName(["items[0]", "items[0].name"]);
+
+        clear(form);
+
+        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+    });
+});
+
+const registrationOrders: { order: string, registeredFields: FieldPath<OrderForm>[] }[] = [
+    { order: "the item is registered before its field", registeredFields: ["items[0]", "items[0].name"] },
+    { order: "the item is registered after its field", registeredFields: ["items[0].name", "items[0]"] },
+];
+
+const formWithRegisteredFields = (registeredFields: FieldPath<OrderForm>[]) => {
+    const form = new KertyForm<OrderForm>({ data: { items: [{ name: "" }] } });
+    registeredFields.forEach((fieldName) => form.addFieldListener(fieldName, () => { }));
+    return form;
+};
+
+describe("KertyForm – registration order of an array item and its fields", () => {
+    it.each(registrationOrders)("should mark the item as touched when $order", ({ registeredFields }) => {
+        const form = formWithRegisteredFields(registeredFields);
+
+        form.touch("items[0]");
+
+        expect(form.getFieldState("items[0]").isTouched).toBe(true);
+    });
+
+    it.each(registrationOrders)("should clear the item message on reset when $order", ({ registeredFields }) => {
+        const form = formWithRegisteredFields(registeredFields);
+        form.applyFieldValidationResult("items[0]", error("Item is invalid"));
+
+        form.reset();
+
+        expect(form.getFieldValidationMessage("items[0]")).toBeUndefined();
+    });
+});
+
+type CatalogForm = {
+    items: { name: string, address?: { city: string } }[];
+    itemsArchive: string;
+    matrix: string[][];
+};
+
+const catalogForm = (itemCount: number, failingFields: FieldPath<CatalogForm>[]) => {
+    const form = new KertyForm<CatalogForm>({
+        data: {
+            items: Array.from({ length: itemCount }, () => ({ name: "", address: { city: "" } })),
+            itemsArchive: "",
+            matrix: [["", ""], ["", ""]],
+        },
+    });
+    failingFields.forEach((fieldName) => form.applyFieldValidationResult(fieldName, error(`${fieldName} is invalid`)));
+    return form;
+};
+
+describe("KertyForm.removeItems – clearing validation of removed items", () => {
+    it("should keep the form invalid when a later item whose index starts with the removed index still fails", () => {
+        const form = catalogForm(11, ["items[10].name"]);
+
+        form.removeItems("items", 1);
+
+        expect(form.getState().isValid).toBe(false);
+    });
+
+    it("should keep the message of a sibling field whose name starts with the array name when the last item is removed", () => {
+        const form = catalogForm(1, ["itemsArchive"]);
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldValidationMessage("itemsArchive")?.text).toBe("itemsArchive is invalid");
+    });
+
+    it("should clear the message of a nested field of the removed item when an item is removed", () => {
+        const form = catalogForm(3, ["items[1].address.city"]);
+
+        form.removeItems("items", 1);
+
+        expect(form.getFieldValidationMessage("items[1].address.city")).toBeUndefined();
+    });
+
+    it("should clear the message of the removed item when the item at the last index is removed", () => {
+        const form = catalogForm(3, ["items[2].name"]);
+
+        form.removeItems("items", 2);
+
+        expect(form.getFieldValidationMessage("items[2].name")).toBeUndefined();
+    });
+
+    it("should clear the message of every removed item when several items are removed", () => {
+        const form = catalogForm(4, ["items[0].name", "items[2].name"]);
+
+        form.removeItems("items", [0, 2]);
+
+        expect([
+            form.getFieldValidationMessage("items[0].name"),
+            form.getFieldValidationMessage("items[2].name"),
+        ]).toEqual([undefined, undefined]);
+    });
+
+    it("should clear the message of the array field when one of its items is removed", () => {
+        const form = catalogForm(3, ["items"]);
+
+        form.removeItems("items", 1);
+
+        expect(form.getFieldValidationMessage("items")).toBeUndefined();
+    });
+
+    it("should clear the message of the array field when its last item is removed", () => {
+        const form = catalogForm(1, ["items"]);
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldValidationMessage("items")).toBeUndefined();
+    });
+
+    it("should keep the message of the array field when an item is removed in silent mode", () => {
+        const form = catalogForm(3, ["items"]);
+
+        form.removeItems("items", 1, true);
+
+        expect(form.getFieldValidationMessage("items")?.text).toBe("items is invalid");
+    });
+
+    it("should clear the message of a removed nested array item that has its own items registered", () => {
+        const form = catalogForm(0, ["matrix[0]", "matrix[0][1]"]);
+
+        form.removeItems("matrix", 0);
+
+        expect(form.getFieldValidationMessage("matrix[0]")).toBeUndefined();
+    });
+
+    it("should make the form valid when the removed item held the only failing field", () => {
+        const form = catalogForm(3, ["items[1].address.city"]);
+
+        form.removeItems("items", 1);
+
+        expect(form.getState().isValid).toBe(true);
+    });
+});
+
+/*
+ * Field state is keyed by index, so removing an earlier item has to move a later
+ * item's message down with the data instead of leaving it at the old index.
+ */
+describe("KertyForm.removeItems – moving validation of later items", () => {
+    it("should move the message of a later item to its new index when an earlier item is removed", () => {
+        const form = catalogForm(11, ["items[10].name"]);
+
+        form.removeItems("items", 1);
+
+        expect(form.getFieldValidationMessage("items[9].name")?.text).toBe("items[10].name is invalid");
+    });
+
+    it("should clear the message at the old last index when an earlier item is removed", () => {
+        const form = catalogForm(11, ["items[10].name"]);
+
+        form.removeItems("items", 1);
+
+        expect(form.getFieldValidationMessage("items[10].name")).toBeUndefined();
+    });
+
+    it("should mark the moved field as invalid at its new index when an earlier item is removed", () => {
+        const form = catalogForm(3, ["items[2].name"]);
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldState("items[1].name").isValid).toBe(false);
+    });
+
+    it("should move the message of a nested field to its new index when an earlier item is removed", () => {
+        const form = catalogForm(3, ["items[2].address.city"]);
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldValidationMessage("items[1].address.city")?.text).toBe("items[2].address.city is invalid");
+    });
+
+    it("should move the message to its new index when an earlier item is removed in silent mode", () => {
+        const form = catalogForm(3, ["items[2].name"]);
+
+        form.removeItems("items", 0, true);
+
+        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("items[2].name is invalid");
+    });
+
+    it("should clear the message at the old last index when that field still has a listener", () => {
+        const form = catalogForm(3, ["items[2].name"]);
+        form.addFieldListener("items[2].name", () => { });
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldValidationMessage("items[2].name")).toBeUndefined();
+    });
+});
+
+// ─── getInvalidFields ────────────────────────────────────────────────────────
+
+describe("KertyForm.getInvalidFields", () => {
+    it("should return an empty list when no field is invalid", () => {
+        const form = mountedForm();
+
+        expect(form.getInvalidFields()).toEqual([]);
+    });
+
+    it("should return the field when an applied result has an error", () => {
+        const form = mountedForm();
+        form.applyFieldValidationResult("username", error("Taken"));
+
+        expect(form.getInvalidFields()).toEqual(["username"]);
+    });
+
+    it("should not return the field when an applied result has only a warning", () => {
+        const form = mountedForm();
+        form.applyFieldValidationResult("username", warning("Weak"));
+
+        expect(form.getInvalidFields()).toEqual([]);
+    });
+
+    it("should return the fields reported with errors when the form is validated", () => {
+        const form = mountedForm(requiredLoginValidator(), { username: "bob" });
+        form.validate();
+
+        expect(form.getInvalidFields()).toEqual(["password"]);
+    });
+
+    it("should return array item fields in index order when they were invalidated out of order", () => {
+        const form = new KertyForm<any>({ data: { rows: [{ a: 1 }, { a: 2 }, { a: 3 }] } });
+        form.applyValidationResults(new Map([["rows[2].a", error("x")], ["rows[0].a", error("x")], ["rows[1].a", error("x")]]));
+
+        expect(form.getInvalidFields()).toEqual(["rows[0].a", "rows[1].a", "rows[2].a"]);
+    });
+
+    it("should return the array item itself when the item is invalid", () => {
+        const form = new KertyForm<any>({ data: { rows: [{ a: 1 }, { a: 2 }] } });
+        form.applyFieldValidationResult("rows[1]", error("x"));
+
+        expect(form.getInvalidFields()).toEqual(["rows[1]"]);
+    });
+
+    it("should return a nested field of an array item when it is invalid", () => {
+        const form = new KertyForm<any>({ data: { rows: [{ address: { city: "" } }] } });
+        form.applyFieldValidationResult("rows[0].address.city", error("x"));
+
+        expect(form.getInvalidFields()).toEqual(["rows[0].address.city"]);
+    });
+
+    it("should return the field at its new index when an item is inserted before it", () => {
+        const form = new KertyForm<any>({ data: { rows: [{ a: 1 }, { a: 2 }] } });
+        form.applyFieldValidationResult("rows[1].a", error("x"));
+
+        form.insertItems("rows", 0, { a: 0 });
+
+        expect(form.getInvalidFields()).toEqual(["rows[2].a"]);
+    });
+
+    it("should not return the field when its item is removed", () => {
+        const form = new KertyForm<any>({ data: { rows: [{ a: 1 }, { a: 2 }] } });
+        form.applyFieldValidationResult("rows[1].a", error("x"));
+
+        form.removeItems("rows", 1);
+
+        expect(form.getInvalidFields()).toEqual([]);
+    });
+
+    it("should not return the field when the validation results are reset", () => {
+        const form = mountedForm();
+        form.applyFieldValidationResult("username", error("Taken"));
+
+        form.resetValidationResults();
+
+        expect(form.getInvalidFields()).toEqual([]);
+    });
+
+    it("should not return the field once its listener unsubscribes", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {} });
+        const unsubscribe = form.addFieldListener("username", () => { });
+        form.applyFieldValidationResult("username", error("Taken"));
+
+        unsubscribe();
+
+        expect(form.getInvalidFields()).toEqual([]);
     });
 });

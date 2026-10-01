@@ -213,3 +213,66 @@ describe("getObjectValue – data edge cases", () => {
         expect(getObjectValue(arr, "[1]")).toBe("y");
     });
 });
+
+describe("getObjectValue – internal name", () => {
+    const internalData = {
+        "#persons": "internal persons",
+        persons: [
+            { "#": "internal first person", name: "Alice", "#name": "internal Alice" },
+            { name: "Bob", "#name": "internal Bob" },
+        ],
+        person: { name: "Carol", "#name": "internal Carol" },
+        matrix: [Object.assign(["a", { "#": "internal matrix cell" }], { "#": "internal matrix row" })],
+    };
+
+    const getInternal = (path: string) => getObjectValueInternal(internalData, getFieldPath(path, true), true);
+
+    it.each([
+        ["person.name", "internal Carol"],
+        ["persons", "internal persons"],
+        ["persons[]", "internal persons"],
+        ["persons[1].name", "internal Bob"],
+    ])("should read the internal name of the last property when path is %s", (path, expected) => {
+        const result = getInternal(path);
+
+        expect(result).toBe(expected);
+    });
+
+    it.each([
+        ["persons[0]", "internal first person"],
+        ["matrix[0]", "internal matrix row"],
+        ["matrix[0][1]", "internal matrix cell"],
+    ])("should read the internal key inside the array item when the last part of %s is an array item", (path, expected) => {
+        const result = getInternal(path);
+
+        expect(result).toBe(expected);
+    });
+
+    it("should return undefined when the array item has no internal key", () => {
+        const result = getInternal("persons[1]");
+
+        expect(result).toBeUndefined();
+    });
+
+    it("should not use internal names for intermediate parts", () => {
+        const obj = { person: { name: "Carol", "#name": "internal Carol" }, "#person": { "#name": "wrong" } };
+
+        const result = getObjectValueInternal(obj, getFieldPath("person.name", true), true);
+
+        expect(result).toBe("internal Carol");
+    });
+
+    it("should return undefined when only the plain property exists", () => {
+        const obj = { person: { name: "Carol" } };
+
+        const result = getObjectValueInternal(obj, getFieldPath("person.name", true), true);
+
+        expect(result).toBeUndefined();
+    });
+
+    it("should read the plain property when useInternalName is not set", () => {
+        const result = getObjectValueInternal(internalData, getFieldPath("person.name", true));
+
+        expect(result).toBe("Carol");
+    });
+});

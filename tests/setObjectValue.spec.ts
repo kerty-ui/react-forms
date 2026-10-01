@@ -263,3 +263,50 @@ describe("setObjectValue - type safety scenarios", () => {
         expect(data.profile.age).toBe(30);
     });
 });
+
+describe("setObjectValue - internal name", () => {
+    const setInternal = (data: any, path: string, value: unknown) => setObjectValue(data, getFieldPath(path, true), value, true);
+
+    it("should write the internal name of the last part when the last part is a property", () => {
+        const data: any = { person: {} };
+
+        setInternal(data, "person.name", "field");
+
+        expect(data.person).toEqual({ "#name": "field" });
+    });
+
+    it("should write the internal key inside a new array item node when the last part is an array item", () => {
+        const data: any = {};
+
+        setInternal(data, "items[0]", "item");
+
+        expect(data.items[0]).toEqual({ "#": "item" });
+    });
+
+    it("should keep the item fields when the array item is written after one of its fields", () => {
+        const data: any = {};
+        setInternal(data, "items[0].name", "field");
+
+        setInternal(data, "items[0]", "item");
+
+        expect(data.items[0]).toEqual({ "#": "item", "#name": "field" });
+    });
+
+    it("should keep the array item when one of its fields is written after it", () => {
+        const data: any = {};
+        setInternal(data, "items[0]", "item");
+
+        setInternal(data, "items[0].name", "field");
+
+        expect(data.items[0]).toEqual({ "#": "item", "#name": "field" });
+    });
+
+    it("should keep the nested array item when one of its items is written after it", () => {
+        const data: any = {};
+        setInternal(data, "matrix[0]", "row");
+
+        setInternal(data, "matrix[0][1]", "cell");
+
+        expect([data.matrix[0]["#"], data.matrix[0][1]["#"]]).toEqual(["row", "cell"]);
+    });
+});

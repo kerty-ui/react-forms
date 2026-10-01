@@ -1,6 +1,8 @@
-﻿import type { FieldPathPart, ObjectData } from "../types";
+import type { FieldPathPart, ObjectData } from "../types";
+import { INTERNAL_NAME_PREFIX } from "./getFieldPath";
 
-export const setObjectValue = <TValue,>(data: ObjectData | null | undefined, path: FieldPathPart[], value: TValue) => {
+export const setObjectValue = <TValue,>(
+    data: ObjectData | null | undefined, path: FieldPathPart[], value: TValue, useInternalName?: boolean) => {
 
     if(data == null || path.length === 0) {
         return;
@@ -16,11 +18,30 @@ export const setObjectValue = <TValue,>(data: ObjectData | null | undefined, pat
             childObj = parentObj[part.name] = part.isArray ? [] : {};
         }
         else if(part.isArray && !Array.isArray(childObj)) {
-            childObj = parentObj[part.name] = [];
+            const arrayObj: any = [];
+            // A node that already holds the item's own internal value keeps it once it becomes an array.
+            if(useInternalName && childObj[INTERNAL_NAME_PREFIX] !== undefined) {
+                arrayObj[INTERNAL_NAME_PREFIX] = childObj[INTERNAL_NAME_PREFIX];
+            }
+            childObj = parentObj[part.name] = arrayObj;
         }
         parentObj = childObj;
     }
 
     const lastPart = path[lastIndex];
-    parentObj[lastPart.name] = value;
+    if(!useInternalName) {
+        parentObj[lastPart.name] = value;
+        return;
+    }
+
+    if(lastPart.isArrayItem) {
+        let itemNode = parentObj[lastPart.name];
+        if(itemNode == null) {
+            itemNode = parentObj[lastPart.name] = {};
+        }
+        itemNode[INTERNAL_NAME_PREFIX] = value;
+    }
+    else {
+        parentObj[lastPart.internalName!] = value;
+    }
 }

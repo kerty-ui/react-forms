@@ -862,7 +862,7 @@ describe("useField – parent notification", () => {
         expect({ other: renderCountOf("other"), sibling: renderCountOf("sibling") }).toEqual(before);
     });
 
-    it("should not re-render a component bound to the parent field state when a child field changes", () => {
+    const renderParentState = () => {
         const form = { current: null as any };
         const Parent = ({ f }: { f: IKertyForm<any> }) => {
             useFieldState(f, "parent");
@@ -874,14 +874,29 @@ describe("useField – parent notification", () => {
             return <Parent f={f} />;
         };
         render(<Component />);
+        return form;
+    };
+
+    it("should re-render a component bound to the parent field state once when a child field change makes the parent dirty", () => {
+        const form = renderParentState();
         const before = renderCountOf("parentState");
 
         act(() => form.current.setFieldValue("parent.text", "c"));
 
+        expect(renderCountOf("parentState")).toBe(before + 1);
+    });
+
+    it("should not re-render a component bound to the parent field state when a child field changes while the parent is already dirty", () => {
+        const form = renderParentState();
+        act(() => form.current.setFieldValue("parent.text", "c"));
+        const before = renderCountOf("parentState");
+
+        act(() => form.current.setFieldValue("parent.text", "d"));
+
         expect(renderCountOf("parentState")).toBe(before);
     });
 
-    it("should not re-render a component bound to the array when a property of one of its items changes", () => {
+    const renderRows = () => {
         const form = { current: null as any };
         const List = ({ f }: { f: IKertyForm<any> }) => {
             useField<{ text: string }[]>(f, "rows");
@@ -893,9 +908,24 @@ describe("useField – parent notification", () => {
             return <List f={f} />;
         };
         render(<Component />);
+        return form;
+    };
+
+    it("should re-render a component bound to the array once when a property change of one of its items makes the array dirty", () => {
+        const form = renderRows();
         const before = renderCountOf("rows");
 
         act(() => form.current.setFieldValue("rows[0].text", "b"));
+
+        expect(renderCountOf("rows")).toBe(before + 1);
+    });
+
+    it("should not re-render a component bound to the array when a property of one of its items changes while the array is already dirty", () => {
+        const form = renderRows();
+        act(() => form.current.setFieldValue("rows[0].text", "b"));
+        const before = renderCountOf("rows");
+
+        act(() => form.current.setFieldValue("rows[0].text", "c"));
 
         expect(renderCountOf("rows")).toBe(before);
     });

@@ -287,14 +287,26 @@ describe("KertyForm – hierarchical field notification", () => {
         expect(count.calls).toBe(1);
     });
 
-    it("should not notify a grandparent field listener when a deeply nested field changes", () => {
+    it("should notify a grandparent field listener once when a deeply nested field change makes the grandparent dirty", () => {
         const form = new KertyForm<any>({ data: { parentRoot: { parent: { text: "a" } } } });
         const [count, listener] = counter();
         form.addFieldListener("parentRoot", listener);
 
         form.setFieldValue("parentRoot.parent.text", "b");
 
-        expect(count.calls).toBe(0);
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify a grandparent field listener when a deeply nested field changes while the grandparent is already dirty", () => {
+        const form = new KertyForm<any>({ data: { parentRoot: { parent: { text: "a" } } } });
+        const [count, listener] = counter();
+        form.addFieldListener("parentRoot", listener);
+        form.setFieldValue("parentRoot.parent.text", "b");
+        const before = count.calls;
+
+        form.setFieldValue("parentRoot.parent.text", "c");
+
+        expect(count.calls).toBe(before);
     });
 
     it("should notify the array item listener when a property of that item changes", () => {
@@ -307,14 +319,26 @@ describe("KertyForm – hierarchical field notification", () => {
         expect(count.calls).toBe(1);
     });
 
-    it("should not notify the array listener when a property of one of its items changes", () => {
+    it("should notify the array listener once when a property change of one of its items makes the array dirty", () => {
         const form = new KertyForm<any>({ data: { parent: [{ text: "a" }] } });
         const [count, listener] = counter();
         form.addFieldListener("parent", listener);
 
         form.setFieldValue("parent[0].text", "b");
 
-        expect(count.calls).toBe(0);
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not notify the array listener when a property of one of its items changes while the array is already dirty", () => {
+        const form = new KertyForm<any>({ data: { parent: [{ text: "a" }] } });
+        const [count, listener] = counter();
+        form.addFieldListener("parent", listener);
+        form.setFieldValue("parent[0].text", "b");
+        const before = count.calls;
+
+        form.setFieldValue("parent[0].text", "c");
+
+        expect(count.calls).toBe(before);
     });
 
     it("should notify the array listener when one of its items is assigned directly", () => {

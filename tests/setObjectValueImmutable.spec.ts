@@ -192,3 +192,61 @@ describe("setObjectValueImmutable – arrays", () => {
         expect(inner).toEqual(["a", "b"]);
     });
 });
+
+describe("setObjectValueImmutable – internal name", () => {
+    const setInternal = <T,>(data: any, name: string, value: T) =>
+        setObjectValueImmutable(data, getFieldPath(name, true), value, true);
+
+    it.each([
+        ["person.name", {}, { person: { "#name": "x" } }],
+        ["persons", {}, { "#persons": "x" }],
+        ["persons[]", {}, { "#persons": "x" }],
+        ["persons[0]", {}, { persons: [{ "#": "x" }] }],
+        ["persons[0].name", {}, { persons: [{ "#name": "x" }] }],
+        ["matrix[0][1]", { matrix: [["a", {}]] }, { matrix: [["a", { "#": "x" }]] }],
+    ])("should write the value under the internal name when path is %s", (path, data, expected) => {
+        const result = setInternal(data, path, "x");
+
+        expect(result).toEqual(expected);
+    });
+
+    it("should keep the item fields when the array item is written", () => {
+        const data = { persons: [{ "#name": "field" }] };
+
+        const result = setInternal(data, "persons[0]", "item");
+
+        expect(result.persons[0]).toEqual({ "#": "item", "#name": "field" });
+    });
+
+    it("should keep the nested array item value when one of its items is written", () => {
+        const data = { matrix: [Object.assign([], { "#": "row" })] };
+
+        const result = setInternal(data, "matrix[0][1]", "cell");
+
+        expect([result.matrix[0]["#"], result.matrix[0][1]["#"]]).toEqual(["row", "cell"]);
+    });
+
+    it("should keep the plain property unchanged when setting an internal value", () => {
+        const data = { person: { name: "Carol" } };
+
+        const result = setInternal(data, "person.name", "x");
+
+        expect(result).toEqual({ person: { name: "Carol", "#name": "x" } });
+    });
+
+    it("should leave the original object untouched when setting an internal value", () => {
+        const data = { persons: [{ name: "Alice" }] };
+
+        setInternal(data, "persons[0].name", "x");
+
+        expect(data).toEqual({ persons: [{ name: "Alice" }] });
+    });
+
+    it("should write the plain property when useInternalName is not set", () => {
+        const data = { person: { name: "Carol" } };
+
+        const result = setObjectValueImmutable(data, getFieldPath("person.name", true), "x");
+
+        expect(result).toEqual({ person: { name: "x" } });
+    });
+});

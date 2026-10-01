@@ -28,8 +28,13 @@ const noop = () => {};
 // grid of FormFields registers.
 type Mode = "bare" | "subscribed";
 
-const createForm = (rows: number, mode: Mode, value = "value", validator?: IValidator<Grid>) => {
-    const form = new KertyForm<Grid>({ data: { title: "Grid", rows: createRows(rows, value) }, validator });
+const createForm = (
+    rows: number, mode: Mode, value = "value", validator?: IValidator<Grid>, dirtyCheckEnabled = true) => {
+    const form = new KertyForm<Grid>({
+        data: { title: "Grid", rows: createRows(rows, value) },
+        validator,
+        dirtyCheckEnabled,
+    });
 
     if(mode === "subscribed") {
         form.addFieldListener("title", noop);
@@ -47,15 +52,25 @@ const createForm = (rows: number, mode: Mode, value = "value", validator?: IVali
 
 const listenerCount = (rows: number) => rows * (CELLS_PER_ROW + 1) + 2;
 
-// Vitest does not expose tinybench's per-iteration hooks, so benches that grow
-// the array first put the original rows back with a silent setFieldValue. That
-// keeps every iteration measuring an array of the same length; the cost of the
-// restore alone is reported as its own row where it matters.
-const createGrowingForm = (rows: number, mode: Mode) => {
-    const form = createForm(rows, mode);
+// Vitest does not expose tinybench's per-iteration hooks, so benches that change
+// the array length undo the change before the next iteration. Benches that shift
+// items undo with the opposite silent array operation, because field state
+// follows the item position and a silent setFieldValue would leave the state
+// shifted. Appending shifts nothing, so it restores the original rows with a
+// silent setFieldValue; the cost of that restore alone is reported as its own row.
+const createGrowingForm = (rows: number, mode: Mode, dirtyCheckEnabled = true) => {
+    const form = createForm(rows, mode, "value", undefined, dirtyCheckEnabled);
     const baseRows = form.getData().rows;
     const restore = () => form.setFieldValue("rows", baseRows, true);
-    return { form, restore };
+    const undoInsert = (index: number, count = 1) => {
+        form.removeItems("rows", Array.from({ length: count }, (_, i) => index + i), true);
+    };
+    const undoRemove = (indexes: number[]) => {
+        for(const index of [...indexes].sort((a, b) => a - b)) {
+            form.insertItems("rows", index, baseRows[index], true);
+        }
+    };
+    return { form, restore, undoInsert, undoRemove };
 };
 
 const NEW_ITEM = createRow("new");
@@ -135,16 +150,129 @@ describe("setFieldValue – variants at 1000 rows (subscribed)", () => {
     });
 });
 
+// ── dirty check enabled vs disabled ────────────────────────────────────────
+
+// Every value change compares the new value with the initial one. Disabling the
+// dirty check skips that comparison and the dirty bookkeeping of the field and of
+// its registered ancestors, so each pair below shows what the feature costs. The
+// forms are "subscribed" so the row and the collection are registered ancestors.
+const DIRTY_CHECK_VARIANTS = [
+    { name: "dirty check enabled", enabled: true },
+    { name: "dirty check disabled", enabled: false },
+] as const;
+
+const describeDirtyCheckPair = (title: string, createBench: (dirtyCheckEnabled: boolean) => () => void) => {
+    describe(`dirty check – ${title}`, () => {
+        for(const variant of DIRTY_CHECK_VARIANTS) {
+            bench(variant.name, createBench(variant.enabled));
+        }
+    });
+};
+
+// The cell alternates between its initial and a changed value, so it flips
+// between dirty and clean on every call. Going clean makes the row and the whole
+// collection compare themselves with the initial data to see whether anything
+// else still differs, which is the most expensive path of the dirty check.
+for(const rows of SIZES) {
+    describeDirtyCheckPair(`leaf cell flipping dirty and clean, ${rows} rows / ${listenerCount(rows)} listeners`, (enabled) => {
+        const form = createForm(rows, "subscribed", "value", undefined, enabled);
+        const target = `rows[${Math.floor(rows / 2)}].cell3` as any;
+        let counter = 0;
+
+        return () => {
+            form.setFieldValue(target, (counter++ & 1) === 0 ? "changed" : "value");
+        };
+    });
+}
+
+// The cell never returns to its initial value, so after the first call it stays
+// dirty and only the cell itself is compared.
+describeDirtyCheckPair("leaf cell staying dirty, 1000 rows", (enabled) => {
+    const form = createForm(1_000, "subscribed", "value", undefined, enabled);
+    let counter = 0;
+
+    return () => {
+        form.setFieldValue("rows[500].cell3" as any, (counter++ & 1) === 0 ? "a" : "b");
+    };
+});
+
+describeDirtyCheckPair("row item staying dirty, 1000 rows", (enabled) => {
+    const form = createForm(1_000, "subscribed", "value", undefined, enabled);
+    const rowA = createRow("a");
+    const rowB = createRow("b");
+    let counter = 0;
+
+    return () => {
+        form.setFieldValue("rows[500]" as any, (counter++ & 1) === 0 ? rowA : rowB);
+    };
+});
+
+// Both collections are deep-equal to the initial rows, so with the dirty check
+// enabled every call walks all 10 000 cells to conclude the field is clean.
+describeDirtyCheckPair("whole collection deep-equal to the initial value, 1000 rows", (enabled) => {
+    const form = createForm(1_000, "subscribed", "value", undefined, enabled);
+    const collectionA = createRows(1_000);
+    const collectionB = createRows(1_000);
+    let counter = 0;
+
+    return () => {
+        form.setFieldValue("rows", (counter++ & 1) === 0 ? collectionA : collectionB);
+    };
+});
+
+describeDirtyCheckPair("appendItems, 1000 rows", (enabled) => {
+    const { form, restore } = createGrowingForm(1_000, "subscribed", enabled);
+
+    return () => {
+        restore();
+        form.appendItems("rows", NEW_ITEM);
+    };
+});
+
+// Changing the collection re-checks every registered field below it: 11 000
+// fields at 1000 rows. Prepending shifts every row, so each item and cell field
+// is compared with the initial value at its index.
+describeDirtyCheckPair("prependItems, 1000 rows", (enabled) => {
+    const { form, undoInsert } = createGrowingForm(1_000, "subscribed", enabled);
+
+    return () => {
+        form.prependItems("rows", NEW_ITEM);
+        undoInsert(0);
+    };
+});
+
+describeDirtyCheckPair("removeItems in the middle, 1000 rows", (enabled) => {
+    const { form, undoRemove } = createGrowingForm(1_000, "subscribed", enabled);
+
+    return () => {
+        form.removeItems("rows", 500);
+        undoRemove([500]);
+    };
+});
+
+// Every cell differs from its initial value, so the collection stays dirty and
+// each of the 11 000 registered fields below it is compared one by one.
+describeDirtyCheckPair("whole collection replaced with different values, 1000 rows", (enabled) => {
+    const form = createForm(1_000, "subscribed", "value", undefined, enabled);
+    const collectionA = createRows(1_000, "a");
+    const collectionB = createRows(1_000, "b");
+    let counter = 0;
+
+    return () => {
+        form.setFieldValue("rows", (counter++ & 1) === 0 ? collectionA : collectionB);
+    };
+});
+
 // ── prependItems ───────────────────────────────────────────────────────────
 
 for(const mode of ["bare", "subscribed"] as const) {
     describe(`prependItems – single item by form size (${mode})`, () => {
         for(const rows of SIZES) {
-            const { form, restore } = createGrowingForm(rows, mode);
+            const { form, undoInsert } = createGrowingForm(rows, mode);
 
             bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
-                restore();
                 form.prependItems("rows", NEW_ITEM);
+                undoInsert(0);
             });
         }
     });
@@ -156,20 +284,20 @@ describe("prependItems – batch size at 1000 rows (subscribed)", () => {
     const loop = createGrowingForm(1_000, "subscribed");
 
     bench("1 item", () => {
-        single.restore();
         single.form.prependItems("rows", NEW_ITEM);
+        single.undoInsert(0);
     });
 
     bench("10 items – one call", () => {
-        batch.restore();
         batch.form.prependItems("rows", NEW_ITEMS_10);
+        batch.undoInsert(0, NEW_ITEMS_10.length);
     });
 
     bench("10 items – ten calls", () => {
-        loop.restore();
         for(let i = 0; i < NEW_ITEMS_10.length; i++) {
             loop.form.prependItems("rows", NEW_ITEMS_10[i]);
         }
+        loop.undoInsert(0, NEW_ITEMS_10.length);
     });
 });
 
@@ -178,12 +306,12 @@ describe("prependItems – batch size at 1000 rows (subscribed)", () => {
 for(const mode of ["bare", "subscribed"] as const) {
     describe(`insertItems – single item in the middle by form size (${mode})`, () => {
         for(const rows of SIZES) {
-            const { form, restore } = createGrowingForm(rows, mode);
+            const { form, undoInsert } = createGrowingForm(rows, mode);
             const index = Math.floor(rows / 2);
 
             bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
-                restore();
                 form.insertItems("rows", index, NEW_ITEM);
+                undoInsert(index);
             });
         }
     });
@@ -195,18 +323,18 @@ describe("insertItems – position at 1000 rows (subscribed)", () => {
     const end = createGrowingForm(1_000, "subscribed");
 
     bench("start (index 0)", () => {
-        start.restore();
         start.form.insertItems("rows", 0, NEW_ITEM);
+        start.undoInsert(0);
     });
 
     bench("middle (index 500)", () => {
-        middle.restore();
         middle.form.insertItems("rows", 500, NEW_ITEM);
+        middle.undoInsert(500);
     });
 
     bench("end (index 1000)", () => {
-        end.restore();
         end.form.insertItems("rows", 1_000, NEW_ITEM);
+        end.undoInsert(1_000);
     });
 });
 
@@ -216,20 +344,20 @@ describe("insertItems – batch size at 1000 rows (subscribed)", () => {
     const loop = createGrowingForm(1_000, "subscribed");
 
     bench("1 item", () => {
-        single.restore();
         single.form.insertItems("rows", 500, NEW_ITEM);
+        single.undoInsert(500);
     });
 
     bench("10 items – one call", () => {
-        batch.restore();
         batch.form.insertItems("rows", 500, NEW_ITEMS_10);
+        batch.undoInsert(500, NEW_ITEMS_10.length);
     });
 
     bench("10 items – ten calls", () => {
-        loop.restore();
         for(let i = 0; i < NEW_ITEMS_10.length; i++) {
             loop.form.insertItems("rows", 500 + i, NEW_ITEMS_10[i]);
         }
+        loop.undoInsert(500, NEW_ITEMS_10.length);
     });
 });
 
@@ -248,13 +376,13 @@ describe("add one item at 1000 rows (subscribed)", () => {
     });
 
     bench("prependItems", () => {
-        prepend.restore();
         prepend.form.prependItems("rows", NEW_ITEM);
+        prepend.undoInsert(0);
     });
 
     bench("insertItems(0)", () => {
-        insert.restore();
         insert.form.insertItems("rows", 0, NEW_ITEM);
+        insert.undoInsert(0);
     });
 
     bench("appendItems", () => {
@@ -429,6 +557,89 @@ describe("applyValidationResults – variants at 1000 rows (subscribed)", () => 
 
     bench("every cell unknown, ignored (no registered fields)", () => {
         unknownForm.applyValidationResults(everyCell, ignoreOptions);
+    });
+});
+
+// ── getInvalidFields ───────────────────────────────────────────────────────
+
+// The results are applied once up front, so every iteration measures only the
+// walk that collects the names of the invalid fields.
+for(const mode of ["bare", "subscribed"] as const) {
+    describe(`getInvalidFields – error on every cell by form size (${mode})`, () => {
+        for(const rows of SIZES) {
+            const form = createForm(rows, mode);
+            form.applyValidationResults(cellResults(rows, ERROR));
+
+            bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
+                form.getInvalidFields();
+            });
+        }
+    });
+}
+
+describe("getInvalidFields – variants at 1000 rows (subscribed)", () => {
+    const noneForm = createForm(1_000, "subscribed");
+    const singleForm = createForm(1_000, "subscribed");
+    const everyCellForm = createForm(1_000, "subscribed");
+
+    singleForm.applyValidationResults(new Map([["rows[500].cell3", ERROR]]));
+    everyCellForm.applyValidationResults(cellResults(1_000, ERROR));
+
+    bench("no invalid field (skips the walk)", () => {
+        noneForm.getInvalidFields();
+    });
+
+    bench("single invalid cell", () => {
+        singleForm.getInvalidFields();
+    });
+
+    bench("error on every cell", () => {
+        everyCellForm.getInvalidFields();
+    });
+});
+
+// ── removeItems ────────────────────────────────────────────────────────────
+
+for(const mode of ["bare", "subscribed"] as const) {
+    describe(`removeItems – single item in the middle by form size (${mode})`, () => {
+        for(const rows of SIZES) {
+            const { form, undoRemove } = createGrowingForm(rows, mode);
+            const index = Math.floor(rows / 2);
+
+            bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
+                form.removeItems("rows", index);
+                undoRemove([index]);
+            });
+        }
+    });
+}
+
+describe("removeItems – batch size at 1000 rows (subscribed)", () => {
+    const restoreOnly = createGrowingForm(1_000, "subscribed");
+    const single = createGrowingForm(1_000, "subscribed");
+    const batch = createGrowingForm(1_000, "subscribed");
+    const loop = createGrowingForm(1_000, "subscribed");
+    const indexes = Array.from({ length: 10 }, (_, i) => i * 100);
+
+    bench("restore only (overhead of the other rows)", () => {
+        restoreOnly.restore();
+    });
+
+    bench("1 item", () => {
+        single.form.removeItems("rows", 500);
+        single.undoRemove([500]);
+    });
+
+    bench("10 items – one call", () => {
+        batch.form.removeItems("rows", [...indexes]);
+        batch.undoRemove(indexes);
+    });
+
+    bench("10 items – ten calls", () => {
+        for(let i = indexes.length - 1; i >= 0; i--) {
+            loop.form.removeItems("rows", indexes[i]);
+        }
+        loop.undoRemove(indexes);
     });
 });
 

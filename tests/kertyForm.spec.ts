@@ -425,6 +425,298 @@ describe("KertyForm – dirty tracking", () => {
     });
 });
 
+describe("KertyForm – dirty state of a field registered after its value changed", () => {
+    it("should report the field dirty when it is registered after its parent was replaced", () => {
+        const form = new KertyForm<ProfileForm>({ data: { person: { name: "John", address: { city: "Riga" } } } });
+        form.setFieldValue("person", { name: "Armands", address: { city: "Riga" } });
+
+        register(form, "person.name");
+
+        expect(form.getFieldState("person.name").isDirty).toBe(true);
+    });
+
+    it("should report the field of an appended item dirty when it is registered after the item was appended", () => {
+        const form = new KertyForm<any>({ data: { items: [{ name: "a" }] } });
+        form.appendItems("items", { name: "b" });
+
+        register(form, "items[1].name");
+
+        expect(form.getFieldState("items[1].name").isDirty).toBe(true);
+    });
+
+    // The city input is on a tab that is not shown, so nothing listens to "person.address.city".
+    // Setting it directly (e.g. from a "copy address" button) creates its field with no listener,
+    // and that field stays in the tree. Replacing the parent does not update it, so when the tab
+    // is shown again the input gets the stale field instead of a freshly checked one.
+    it("should report the field clean when it is shown after its parent was restored to the initial value while it was hidden", () => {
+        const form = new KertyForm<ProfileForm>({ data: { person: { name: "John", address: { city: "Riga" } } } });
+        register(form, "person.address");
+        form.setFieldValue("person.address.city", "Tallinn");
+        form.setFieldValue("person.address", { city: "Riga" });
+
+        register(form, "person.address.city");
+
+        expect(form.getFieldState("person.address.city").isDirty).toBe(false);
+    });
+
+    it("should report the field clean when it is shown after its parent was changed and restored to the initial value while it was hidden", () => {
+        const form = new KertyForm<ProfileForm>({ data: { person: { name: "John", address: { city: "Riga" } } } });
+        register(form, "person.address");
+        form.setFieldValue("person.address", { city: "Tallinn" });
+        form.setFieldValue("person.address", { city: "Riga" });
+
+        register(form, "person.address.city");
+
+        expect(form.getFieldState("person.address.city").isDirty).toBe(false);
+    });
+});
+
+describe("KertyForm – dirty state of registered ancestors", () => {
+    const profileForm = (registeredFields: string[]) => {
+        const form = new KertyForm<ProfileForm>({ data: { person: { name: "John", address: { city: "Riga" } } } });
+        registeredFields.forEach((fieldName) => register(form, fieldName));
+        return form;
+    };
+
+    it("should mark the parent dirty when a child value changes", () => {
+        const form = profileForm(["person", "person.name"]);
+
+        form.setFieldValue("person.name", "Armands");
+
+        expect(form.getFieldState("person").isDirty).toBe(true);
+    });
+
+    it("should mark the grandparent dirty when a nested child value changes", () => {
+        const form = profileForm(["person", "person.address.city"]);
+
+        form.setFieldValue("person.address.city", "Tallinn");
+
+        expect(form.getFieldState("person").isDirty).toBe(true);
+    });
+
+    it("should mark an ancestor below the top level dirty when a nested child value changes", () => {
+        const form = profileForm(["person.address", "person.address.city"]);
+
+        form.setFieldValue("person.address.city", "Tallinn");
+
+        expect(form.getFieldState("person.address").isDirty).toBe(true);
+    });
+
+    it("should mark the parent clean when the only changed child returns to its initial value", () => {
+        const form = profileForm(["person", "person.name"]);
+        form.setFieldValue("person.name", "Armands");
+
+        form.setFieldValue("person.name", "John");
+
+        expect(form.getFieldState("person").isDirty).toBe(false);
+    });
+
+    it("should keep the parent dirty when a child returns to its initial value while another child still differs", () => {
+        const form = profileForm(["person", "person.name", "person.address.city"]);
+        form.setFieldValue("person.name", "Armands");
+        form.setFieldValue("person.address.city", "Tallinn");
+
+        form.setFieldValue("person.name", "John");
+
+        expect(form.getFieldState("person").isDirty).toBe(true);
+    });
+
+    it("should make the form clean when the only changed child of a dirty parent returns to its initial value", () => {
+        const form = profileForm(["person", "person.name"]);
+        form.setFieldValue("person.name", "Armands");
+
+        form.setFieldValue("person.name", "John");
+
+        expect(form.getState().isDirty).toBe(false);
+    });
+
+    it("should keep the form dirty after another field changes when the changed child unsubscribed while its parent stays registered", () => {
+        const form = new KertyForm<ProfileForm>({ data: { person: { name: "John", address: { city: "Riga" } } } });
+        register(form, "person");
+        const unsubscribe = register(form, "person.name");
+        form.setFieldValue("person.name", "Armands");
+        unsubscribe();
+
+        form.setFieldValue("person.address.city", "Riga");
+
+        expect(form.getState().isDirty).toBe(true);
+    });
+
+    it("should mark the array item dirty when a field of the item changes", () => {
+        const form = new KertyForm<any>({ data: { items: [{ name: "a" }] } });
+        register(form, "items[0]");
+        register(form, "items[0].name");
+
+        form.setFieldValue("items[0].name", "b");
+
+        expect(form.getFieldState("items[0]").isDirty).toBe(true);
+    });
+
+    it("should mark the array field dirty when a field of one of its items changes", () => {
+        const form = new KertyForm<any>({ data: { items: [{ name: "a" }] } });
+        register(form, "items");
+        register(form, "items[0].name");
+
+        form.setFieldValue("items[0].name", "b");
+
+        expect(form.getFieldState("items").isDirty).toBe(true);
+    });
+});
+
+describe("KertyForm – dirty state of registered descendants", () => {
+    const personForm = (registeredFields: string[], config: { dirtyCheckEnabled?: boolean } = {}) => {
+        const form = new KertyForm<any>({ data: { person: { name: "John", surname: "Smith" } }, ...config });
+        registeredFields.forEach((fieldName) => register(form, fieldName));
+        return form;
+    };
+
+    const itemsForm = (registeredFields: string[]) => {
+        const form = new KertyForm<any>({ data: { items: [{ name: "a" }, { name: "b" }] } });
+        registeredFields.forEach((fieldName) => register(form, fieldName));
+        return form;
+    };
+
+    it("should mark a child dirty when its parent is replaced with a different child value", () => {
+        const form = personForm(["person", "person.name"]);
+
+        form.setFieldValue("person", { name: "Armands", surname: "Smith" });
+
+        expect(form.getFieldState("person.name").isDirty).toBe(true);
+    });
+
+    it("should keep a child clean when its parent is replaced with the same child value", () => {
+        const form = personForm(["person", "person.surname"]);
+
+        form.setFieldValue("person", { name: "Armands", surname: "Smith" });
+
+        expect(form.getFieldState("person.surname").isDirty).toBe(false);
+    });
+
+    it("should mark a nested descendant dirty when an ancestor further up is replaced", () => {
+        const form = new KertyForm<any>({ data: { person: { address: { city: "Riga" } } } });
+        register(form, "person.address.city");
+
+        form.setFieldValue("person", { address: { city: "Tallinn" } });
+
+        expect(form.getFieldState("person.address.city").isDirty).toBe(true);
+    });
+
+    it("should mark a dirty child clean when its parent is restored to the initial value", () => {
+        const form = personForm(["person", "person.name"]);
+        form.setFieldValue("person.name", "Armands");
+
+        form.setFieldValue("person", { name: "John", surname: "Smith" });
+
+        expect(form.getFieldState("person.name").isDirty).toBe(false);
+    });
+
+    it("should make the form clean when the parent of the only dirty child is restored to the initial value", () => {
+        const form = personForm(["person", "person.name"]);
+        form.setFieldValue("person.name", "Armands");
+
+        form.setFieldValue("person", { name: "John", surname: "Smith" });
+
+        expect(form.getState().isDirty).toBe(false);
+    });
+
+    it("should mark a dirty child clean when its parent stays dirty but the child returns to its initial value", () => {
+        const form = personForm(["person", "person.name"]);
+        form.setFieldValue("person.name", "Armands");
+
+        form.setFieldValue("person", { name: "John", surname: "Jones" });
+
+        expect(form.getFieldState("person.name").isDirty).toBe(false);
+    });
+
+    it("should mark the parent clean when a child is set back to its initial value after the parent was replaced", () => {
+        const form = personForm(["person", "person.name"]);
+        form.setFieldValue("person", { name: "Armands", surname: "Smith" });
+
+        form.setFieldValue("person.name", "John");
+
+        expect(form.getFieldState("person").isDirty).toBe(false);
+    });
+
+    it("should make the form clean when a child is set back to its initial value after the parent was replaced", () => {
+        const form = personForm(["person", "person.name"]);
+        form.setFieldValue("person", { name: "Armands", surname: "Smith" });
+
+        form.setFieldValue("person.name", "John");
+
+        expect(form.getState().isDirty).toBe(false);
+    });
+
+    it("should not mark a child dirty when its parent is replaced and dirty checking is disabled", () => {
+        const form = personForm(["person", "person.name"], { dirtyCheckEnabled: false });
+
+        form.setFieldValue("person", { name: "Armands", surname: "Smith" });
+
+        expect(form.getFieldState("person.name").isDirty).toBe(false);
+    });
+
+    it("should not mark a child dirty when its parent is replaced silently", () => {
+        const form = personForm(["person", "person.name"]);
+
+        form.setFieldValue("person", { name: "Armands", surname: "Smith" }, true);
+
+        expect(form.getFieldState("person.name").isDirty).toBe(false);
+    });
+
+    it.each([
+        {
+            operation: "prependItems",
+            act: (form: KertyForm<any>) => form.prependItems("items", { name: "x" }),
+            fieldName: "items[1].name",
+        },
+        {
+            operation: "removeItems",
+            act: (form: KertyForm<any>) => form.removeItems("items", 0),
+            fieldName: "items[0].name",
+        },
+        {
+            operation: "swapItem",
+            act: (form: KertyForm<any>) => form.swapItem("items", 0, 1),
+            fieldName: "items[0].name",
+        },
+        {
+            operation: "updateItem",
+            act: (form: KertyForm<any>) => form.updateItem("items", 0, { name: "z" }),
+            fieldName: "items[0].name",
+        },
+    ])("should mark the field of an item dirty when $operation changes the value at its index", ({ act, fieldName }) => {
+        const form = itemsForm(["items[0].name", "items[1].name"]);
+
+        act(form);
+
+        expect(form.getFieldState(fieldName).isDirty).toBe(true);
+    });
+
+    it("should mark the array item field dirty when an item is prepended before it", () => {
+        const form = itemsForm(["items[0]"]);
+
+        form.prependItems("items", { name: "x" });
+
+        expect(form.getFieldState("items[0]").isDirty).toBe(true);
+    });
+
+    it("should keep the fields of the existing items clean when an item is appended", () => {
+        const form = itemsForm(["items[0].name", "items[1].name"]);
+
+        form.appendItems("items", { name: "c" });
+
+        expect(form.getFieldState("items[1].name").isDirty).toBe(false);
+    });
+
+    it("should mark a dirty item field clean when the whole array is restored to the initial value", () => {
+        const form = itemsForm(["items[0].name"]);
+        form.setFieldValue("items[0].name", "z");
+
+        form.setFieldValue("items", [{ name: "a" }, { name: "b" }]);
+
+        expect(form.getFieldState("items[0].name").isDirty).toBe(false);
+    });
+});
+
 describe("KertyForm – dirty tracking when a field unsubscribes", () => {
     it("should keep the form dirty when another dirty field is still subscribed", () => {
         const form = new KertyForm<any>({ data: { a: 1, b: 1 } });

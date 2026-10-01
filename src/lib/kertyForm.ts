@@ -1,7 +1,9 @@
-﻿import { getFieldPath } from "./utils/getFieldPath";
+﻿import { getFieldPath, INTERNAL_NAME_PREFIX } from "./utils/getFieldPath";
 import { getObjectValue } from "./utils/getObjectValue";
+import { setObjectValue } from "./utils/setObjectValue";
 import { setObjectValueImmutable } from "./utils/setObjectValueImmutable";
-import { removeObjectValueImmutable } from "./utils/removeObjectValueImmutable.ts";
+import { removeObjectValue } from "./utils/removeObjectValue";
+import { removeObjectValueImmutable } from "./utils/removeObjectValueImmutable";
 import { isEqual } from "./utils/isEqual";
 import { ValidationResult } from "./validation/validationResult";
 import {
@@ -11,7 +13,6 @@ import {
     type FieldPathByValue,
     type FieldState,
     type FieldSnapshot,
-    type FieldInfo,
     type ArrayFieldPath,
     type ArrayItemType,
     type FormConfig,
@@ -25,7 +26,58 @@ import {
     type IValidationResult,
     type ApplyValidationOptions,
     type ObjectData,
+    type FieldPathPart,
+    type IFieldInfo,
 } from "./types";
+
+type ItemNode = {
+    [INTERNAL_NAME_PREFIX]?: FieldEntry
+};
+
+type ValidArrayItem<T> = ItemNode & (T extends readonly (infer Item)[]
+    ? readonly ValidArrayItem<Item>[]
+    : T extends object
+        ? ValidObject<T>
+        : unknown);
+
+type ValidValue<T> = T extends readonly (infer Item)[]
+    ? readonly ValidArrayItem<Item>[]
+    : T extends object
+        ? ValidObject<T>
+        : never;
+
+type ValidObject<T> = {
+    [K in keyof T]: K extends `${typeof INTERNAL_NAME_PREFIX}${string}` ? FieldEntry : ValidValue<T[K]>;
+};
+
+type RegisteredAncestor = {
+    entry: FieldEntry;
+    nameEndIndex: number;
+    value: unknown;
+    initialValue: unknown;
+};
+
+type MovedItems = {
+    start: number;
+    end: number;
+    extraIndex?: number;
+};
+
+// Returns itself for any property, so a moved item and all of its children differ from any real value.
+const MOVED_ITEM: any = new Proxy({}, { get: () => MOVED_ITEM });
+
+// Moved entries keep the dirty state of their old index, so the descendants dirty check must see the moved
+// positions as changed even when the item value at that position is the same.
+const markMovedItems = (items: unknown[], movedItems: MovedItems) => {
+    const previousItems = [...items];
+    for(let i = movedItems.start; i < movedItems.end; i++) {
+        previousItems[i] = MOVED_ITEM;
+    }
+    if(movedItems.extraIndex !== undefined) {
+        previousItems[movedItems.extraIndex] = MOVED_ITEM;
+    }
+    return previousItems;
+}
 
 const defaultFormState = {
     isTouched: false,
@@ -33,6 +85,13 @@ const defaultFormState = {
     isValid: true,
     isValidated: false,
 } as FormState;
+
+const defaultFieldState = {
+    isTouched: false,
+    isDirty: false,
+    isValid: true,
+    isValidated: false,
+} as FieldState;
 
 const defaultFieldSnapshot = {
     isTouched: false,
@@ -53,6 +112,117 @@ export const defaultFormConfig = {
     clearFormValidationResultsOnChange: true,
 } as Required<FormConfig>
 
+class FieldInfo implements IFieldInfo {
+
+    name: string;
+    path: FieldPathPart[];
+    listenerCount: number = 0;
+
+    constructor(name: string) {
+        this.name = name;
+        this.path = getFieldPath(name, true);
+    }
+}
+
+class FieldEntry {
+
+    lastPartName: string;
+    state: FieldState = defaultFieldState;
+    validationResult?: IValidationResult | undefined = undefined;
+
+    constructor(path: FieldPathPart[]) {
+        this.lastPartName = path[path.length - 1].name;
+    }
+}
+
+class NotifyListenerOptions {
+
+    #formDataChanged: boolean = false;
+    #formStateChanged: boolean = false;
+    #formValidationChanged: boolean = false;
+    #allFieldsAffected: boolean = false;
+    #affectedFields: Set<string> = new Set<string>();
+    #changedFields: { name: string, parentNameLength: number }[] = [];
+
+    formDataChanged() {
+        this.#formDataChanged = true;
+    }
+
+    formStateChanged() {
+        this.#formStateChanged = true;
+    }
+
+    formValidationChanged() {
+        this.#formValidationChanged = true;
+    }
+
+    allFieldsAffected() {
+        this.#allFieldsAffected = true;
+    }
+
+    addAffectedField(fieldName: string) {
+        this.#affectedFields.add(fieldName);
+    }
+
+    addChangedField(fieldName: string) {
+        this.#changedFields.push({
+            name: fieldName,
+            parentNameLength: Math.max(fieldName.lastIndexOf("."), fieldName.lastIndexOf("["))
+        });
+    }
+
+    hasChanged() {
+        return this.#formDataChanged
+            || this.#formStateChanged
+            || this.#formValidationChanged
+            || this.#allFieldsAffected
+            || this.#affectedFields.size > 0
+            || this.#changedFields.length > 0;
+    }
+
+    isNotificationNeeded(listener: FormListenerOptions) {
+        if((listener.listenDataChange && this.#formDataChanged)
+            || (listener.listenStateChange && this.#formStateChanged)
+            || (listener.listenValidationChange && this.#formValidationChanged)) {
+            return true;
+        }
+
+        if(listener.fieldName == null) {
+            return false;
+        }
+
+        if(this.#allFieldsAffected || this.#affectedFields.has(listener.fieldName)) {
+            return true;
+        }
+
+        const listenerFieldNameLength = listener.fieldName.length;
+
+        for(const changedField of this.#changedFields) {
+            const changedFieldNameLength = changedField.name.length;
+            if(listenerFieldNameLength === changedFieldNameLength) {
+                if(listener.fieldName === changedField.name) {
+                    return true;
+                }
+            }
+            else if(listenerFieldNameLength === changedField.parentNameLength) {
+                if(changedField.name.startsWith(listener.fieldName)) {
+                    return true;
+                }
+            }
+            else if(listenerFieldNameLength > changedFieldNameLength) {
+                if(listener.fieldName.startsWith(changedField.name)) {
+                    const next = listener.fieldName[changedFieldNameLength];
+                    if(next === "." || next === "[") {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+}
+
 export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
     #dirtyCheckEnabled: boolean = true;
@@ -69,8 +239,10 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #ruleSet?: string | null;
 
     #fields = new Map<string, FieldInfo>();
-    #dirtyFields = new Set<string>();
-    #invalidFields = new Set<string>();
+    #fieldEntries = {} as ValidObject<TData>;
+    #dirtyCount = 0;
+    #invalidCount = 0;
+    #validatedCount = 0;
     #listeners = new Set<FormListener>();
 
     constructor(options: FormOptions<TData>) {
@@ -116,6 +288,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     addFieldListener(name: FieldPath<TData>, listener: () => void) {
 
         const field = this.#getField(name as string);
+        this.#getFieldEntry(field.path);
 
         field.listenerCount += 1;
 
@@ -152,8 +325,13 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             field.listenerCount -= 1;
             if(field.listenerCount === 0) {
 
-                this.#fields.delete(name as string);
-                this.#invalidFields.delete(name as string);
+                const fieldEntry = this.#getFieldEntry(field.path, false);
+                if(fieldEntry === undefined) {
+                    return;
+                }
+
+                this.#setFieldState(fieldEntry, defaultFieldState);
+                removeObjectValue(this.#fieldEntries as any, field.path, true);
 
                 const listenerOptions = new NotifyListenerOptions();
 
@@ -220,22 +398,24 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         let prevFieldValidationResult: IValidationResult | undefined = undefined;
         let prevFieldSnapshot: FieldSnapshot<TValue> = defaultFieldSnapshot;
 
+        const field = this.#getField(name as string);
+
         return () => {
 
-            const field = this.#getField(name as string);
+            const entry = this.#getFieldEntry(field.path);
 
             const currentFieldValue = getObjectValue<TValue>(this.#data, field.path);
             if(prevFieldValue === currentFieldValue
-                && prevFieldState === field.state
-                && prevFieldValidationResult === field.validationResult) {
+                && prevFieldState === entry.state
+                && prevFieldValidationResult === entry.validationResult) {
                 return prevFieldSnapshot;
             }
 
             prevFieldValue = currentFieldValue;
-            prevFieldState = field.state;
-            prevFieldValidationResult = field.validationResult;
+            prevFieldState = entry.state;
+            prevFieldValidationResult = entry.validationResult;
             prevFieldSnapshot = {
-                ...field.state,
+                ...entry.state,
                 value: currentFieldValue,
                 validationResult: prevFieldValidationResult,
             };
@@ -250,7 +430,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     getFieldState<TPath extends FieldPath<TData>>(name: TPath): FieldState {
-        return this.#getField(name as string).state;
+        return this.#getFieldEntry(this.#getField(name as string).path).state;
     }
 
     setFieldValue<TValue>(name: FieldPathByValue<TData, TValue>, value: TValue | null | undefined, silent?: boolean): void;
@@ -259,22 +439,24 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         const field = this.#getField(name as string);
 
+        const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, value);
 
         if(silent) {
             return;
         }
 
-        this.#onFieldValueChange(name as string, field, value);
+        this.#onFieldValueChange(field, value, previousData);
     }
 
     clearFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent?: boolean) {
         const fieldNames = Array.isArray(name) ? name : [name];
         for(const fieldName of fieldNames) {
             const field = this.#getField(fieldName as string);
+            const previousData = this.#data;
             this.#data = setObjectValueImmutable(this.#data, field.path, undefined);
             if(!silent) {
-                this.#onFieldValueChange(fieldName as string, field, undefined);
+                this.#onFieldValueChange(field, undefined, previousData);
             }
         }
     }
@@ -283,9 +465,10 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const fieldNames = Array.isArray(name) ? name : [name];
         for(const fieldName of fieldNames) {
             const field = this.#getField(fieldName as string);
+            const previousData = this.#data;
             this.#data = removeObjectValueImmutable(this.#data, field.path);
             if(!silent) {
-                this.#onFieldValueChange(fieldName as string, field, undefined);
+                this.#onFieldValueChange(field, undefined, previousData);
             }
         }
     }
@@ -295,12 +478,13 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const listenerOptions = new NotifyListenerOptions();
 
         if(name != null) {
-            const field = this.#getField(name as string);
-            if(!field.state.isTouched) {
-                field.state = {
-                    ...field.state,
+            const field = this.#getField(name);
+            const entry = this.#getFieldEntry(field.path);
+            if(!entry.state.isTouched) {
+                this.#setFieldState(entry, {
+                    ...entry.state,
                     isTouched: true,
-                }
+                });
                 listenerOptions.addAffectedField(name as string);
             }
         }
@@ -317,8 +501,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     reset(data?: TData) {
-        this.#dirtyFields.clear();
-        this.#invalidFields.clear();
+        this.#dirtyCount = 0;
+        this.#invalidCount = 0;
+        this.#validatedCount = 0;
         this.#validationResult = undefined;
 
         if(data != null) {
@@ -331,14 +516,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         this.#state = {...defaultFormState};
 
-        this.#fields.forEach(field => {
-            field.validationResult = undefined;
-            field.state = {
-                isTouched: false,
-                isDirty: false,
-                isValid: true,
-                isValidated: false,
-            };
+        this.#processEntries(this.#fieldEntries, (entry) => {
+            entry.state = defaultFieldState;
+            entry.validationResult = undefined;
         });
 
         for (let listener of this.#listeners) {
@@ -366,22 +546,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             listenerOptions.formValidationChanged();
         }
 
-        for (let [fieldName, field] of this.#fields) {
-            if(field.validationResult == null && field.state.isValid && !field.state.isValidated) {
-                continue;
-            }
+        this.#resetEntriesValidation(listenerOptions, false);
 
-            field.validationResult = undefined;
-            field.state = {
-                ...field.state,
-                isValid: true,
-                isValidated: false
-            };
-
-            listenerOptions.formValidationChanged();
-            listenerOptions.addAffectedField(fieldName);
-            this.#invalidFields.delete(fieldName);
-        }
+        const invalidFields = new Set<string>();
 
         if (this.#validator != null) {
 
@@ -404,22 +571,23 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 }
 
                 const field = this.#getField(fieldName);
+                const entry = this.#getFieldEntry(field.path);
 
                 if(validationResult.messages.length > 0) {
-                    field.validationResult = validationResult;
+                    entry.validationResult = validationResult;
                     listenerOptions.formValidationChanged();
                 }
 
                 const fieldHasError = validationResult.has(Severity.Error);
-                if (fieldHasError) {
-                    this.#invalidFields.add(fieldName);
+                if(fieldHasError) {
+                    invalidFields.add(fieldName);
                 }
 
-                field.state = {
-                    ...field.state,
+                this.#setFieldState(entry, {
+                    ...entry.state,
                     isValid: !fieldHasError,
                     isValidated: true,
-                }
+                });
                 listenerOptions.addAffectedField(fieldName);
             }
         }
@@ -438,7 +606,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         return {
             isValid: formIsValid,
-            invalidFields: new Set<string>(this.#invalidFields),
+            invalidFields,
         };
     }
 
@@ -446,10 +614,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.applyValidationResults(new Map<string, IValidationResult>([["", result]]), options);
     }
 
-    applyFieldValidationResult(
-        name: FieldPath<TData>,
-        result: IValidationResult,
-        options?: ApplyValidationOptions) {
+    applyFieldValidationResult(name: FieldPath<TData>, result: IValidationResult, options?: ApplyValidationOptions) {
         this.applyValidationResults(new Map<string, IValidationResult>([[name, result]]), options);
     }
 
@@ -467,27 +632,12 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const ignoreUnknownFields = options?.unknownFieldBehavior === "ignore";
 
         if(mode === "replace") {
-            this.#invalidFields.clear();
-
             if(this.#validationResult != null) {
                 this.#validationResult = undefined;
                 listenerOptions.formValidationChanged();
             }
 
-            for(let [fieldName, field] of this.#fields) {
-                if(field.validationResult == null
-                    && (field.state.isValid && field.state.isValidated)) {
-                    continue;
-                }
-                field.validationResult = undefined;
-                field.state = {
-                    ...field.state,
-                    isValid: true,
-                    isValidated: true,
-                };
-                listenerOptions.formValidationChanged();
-                listenerOptions.addAffectedField(fieldName);
-            }
+            this.#resetEntriesValidation(listenerOptions, true);
         }
         else {
             if(validationResults.size === 0){
@@ -511,49 +661,40 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 continue;
             }
 
-            const field = ignoreUnknownFields
-                ? this.#fields.get(fieldName)
-                : this.#getField(fieldName);
+            const entry = this.#getFieldEntry(this.#getField(fieldName).path, !ignoreUnknownFields);
 
-            if(field == null) {
+            if(entry == null) {
                 continue;
             }
 
             const fieldValidationResult = new ValidationResult();
             if(mode === "merge") {
-                fieldValidationResult.merge(field.validationResult);
+                fieldValidationResult.merge(entry.validationResult);
             }
 
             fieldValidationResult.merge(validationResult);
 
             if(validationResult.messages.length === 0) {
-                if(field.validationResult == null ||
-                    (field.state.isValid && field.state.isValidated)) {
+                if(entry.validationResult == null ||
+                    (entry.state.isValid && entry.state.isValidated)) {
                     continue;
                 }
 
-                field.validationResult = undefined;
-                field.state = {
-                    ...field.state,
+                entry.validationResult = undefined;
+                this.#setFieldState(entry, {
+                    ...entry.state,
                     isValid: true,
                     isValidated: true,
-                }
-                this.#invalidFields.delete(fieldName);
+                });
                 listenerOptions.addAffectedField(fieldName);
             }
             else {
-                field.validationResult = fieldValidationResult;
-                field.state = {
-                    ...field.state,
+                entry.validationResult = fieldValidationResult;
+                this.#setFieldState(entry, {
+                    ...entry.state,
                     isValid: !fieldValidationResult.has(Severity.Error),
                     isValidated: true,
-                }
-
-                if (field.state.isValid) {
-                    this.#invalidFields.delete(fieldName);
-                } else {
-                    this.#invalidFields.add(fieldName);
-                }
+                });
                 listenerOptions.addAffectedField(fieldName);
             }
         }
@@ -586,22 +727,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             listenerOptions.formValidationChanged();
         }
 
-        for(const [fieldName, field] of this.#fields) {
-            if (field.validationResult == null && field.state.isValid && !field.state.isValidated) {
-                continue;
-            }
-
-            field.validationResult = undefined;
-            field.state = {
-                ...field.state,
-                isValid: true,
-                isValidated: false,
-            }
-
-            listenerOptions.formValidationChanged();
-            listenerOptions.addAffectedField(fieldName);
-            this.#invalidFields.delete(fieldName);
-        }
+        this.#resetEntriesValidation(listenerOptions, false);
 
         const formIsValid = this.#isFormValid();
         if(this.#state.isValid !== formIsValid || this.#state.isValidated) {
@@ -622,20 +748,20 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         const fieldNames = Array.isArray(name) ? name : [name];
         for(const fieldName of fieldNames) {
-            const field = this.#fields.get(fieldName);
-            if(field == null || (field.validationResult == null && field.state.isValid && !field.state.isValidated)) {
+            const field = this.#getField(fieldName);
+            const entry = this.#getFieldEntry(field.path);
+            if(entry.validationResult == null && entry.state.isValid && !entry.state.isValidated) {
                 continue;
             }
 
-            field.validationResult = undefined;
-            field.state = {
-                ...field.state,
+            entry.validationResult = undefined;
+            this.#setFieldState(entry, {
+                ...entry.state,
                 isValid: true,
                 isValidated: false,
-            }
+            });
             listenerOptions.formValidationChanged();
             listenerOptions.addAffectedField(fieldName);
-            this.#invalidFields.delete(fieldName);
         }
 
         const formIsValid = this.#isFormValid();
@@ -660,11 +786,19 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     getFieldValidationResult(name: FieldPath<TData>) {
-        return this.#fields.get(name as string)?.validationResult;
+        return this.#getFieldEntry(this.#getField(name as string).path).validationResult;
     }
 
     getFieldValidationMessage(name: FieldPath<TData>) {
         return this.getFieldValidationResult(name)?.messages[0];
+    }
+
+    getInvalidFields() {
+        const names: string[] = [];
+        if(this.#invalidCount > 0) {
+            this.#collectInvalidFields(this.#fieldEntries as Record<string, unknown>, "", names);
+        }
+        return names;
     }
 
     prependItems<TPath extends ArrayFieldPath<TData>>(
@@ -685,13 +819,16 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         const arrayValue = Array.isArray(value) ? [...value, ...currentValue] : [value, ...currentValue];
 
+        const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
+
+        this.#insertItemEntries(field, 0, arrayValue.length - currentValue.length, arrayValue.length);
 
         if(silent) {
             return;
         }
 
-        this.#onFieldValueChange(name as string, field, arrayValue);
+        this.#onFieldValueChange(field, arrayValue, previousData, { start: 0, end: arrayValue.length });
     }
 
     appendItems<TPath extends ArrayFieldPath<TData>>(
@@ -712,13 +849,14 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         const arrayValue = Array.isArray(value) ? [...currentValue, ...value] : [...currentValue, value];
 
+        const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
 
         if(silent) {
             return;
         }
 
-        this.#onFieldValueChange(name as string, field, arrayValue);
+        this.#onFieldValueChange(field, arrayValue, previousData);
     }
 
     insertItems<TPath extends ArrayFieldPath<TData>>(
@@ -746,13 +884,17 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             arrayValue.splice(index, 0, value);
         }
 
+        const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
+
+        const start = index < 0 ? Math.max(currentValue.length + index, 0) : Math.min(index, currentValue.length);
+        this.#insertItemEntries(field, start, arrayValue.length - currentValue.length, arrayValue.length);
 
         if(silent) {
             return;
         }
 
-        this.#onFieldValueChange(name as string, field, arrayValue);
+        this.#onFieldValueChange(field, arrayValue, previousData, { start, end: arrayValue.length });
     }
 
     removeItems(
@@ -767,50 +909,36 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             return;
         }
 
+        const removedIndexes = Array.isArray(index)
+            ? index.sort((a, b) => b - a)
+            : [index < 0 ? Math.max(currentValue.length + index, 0) : index];
+
         const arrayValue = [...currentValue];
-        if(Array.isArray(index)) {
-            index
-                .sort((a, b) => b - a)
-                .forEach((i) => {
-                    arrayValue.splice(i, 1);
-                });
-        }
-        else {
-            arrayValue.splice(index, 1);
+        for(const removedIndex of removedIndexes) {
+            arrayValue.splice(removedIndex, 1);
         }
 
+        const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
+
+        const entries = getObjectValue<ItemNode[]>(this.#fieldEntries as any, field.path);
+        if(Array.isArray(entries)) {
+            for(const removedIndex of removedIndexes) {
+                if(removedIndex < currentValue.length && removedIndex < entries.length) {
+                    const removedNode = entries.splice(removedIndex, 1)[0];
+                    if(removedNode != null) {
+                        this.#resetFieldStates(removedNode);
+                    }
+                }
+            }
+        }
 
         if(silent) {
             return;
         }
 
-        const clearFields = [];
-        if(arrayValue.length === 0) {
-            clearFields.push(name as string);
-        }
-        else {
-            for (const i of (Array.isArray(index) ? index : [index])) {
-                clearFields.push(`${name}[${i}]`);
-            }
-        }
-
-        if(clearFields.length > 0) {
-            clearFields.forEach((fieldName) => {
-                for (const [key, field] of this.#fields) {
-                    if (key.startsWith(fieldName)) {
-                        field.validationResult = undefined;
-                    }
-                }
-                for (const field of this.#invalidFields) {
-                    if (field.startsWith(fieldName)) {
-                        this.#invalidFields.delete(field);
-                    }
-                }
-            });
-        }
-
-        this.#onFieldValueChange(name as string, field, arrayValue);
+        const firstMoved = removedIndexes[removedIndexes.length - 1];
+        this.#onFieldValueChange(field, arrayValue, previousData, { start: firstMoved, end: arrayValue.length });
     }
 
     swapItem<TPath extends ArrayFieldPath<TData>>(
@@ -837,13 +965,19 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const arrayValue = [...currentValue];
         [arrayValue[fromIndex], arrayValue[toIndex]] = [arrayValue[toIndex], arrayValue[fromIndex]];
 
+        const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
+
+        const entries = getObjectValue<ItemNode[]>(this.#fieldEntries as any, field.path);
+        if(Array.isArray(entries) && (fromIndex < entries.length || toIndex < entries.length)) {
+            [entries[fromIndex], entries[toIndex]] = [entries[toIndex], entries[fromIndex]];
+        }
 
         if(silent) {
             return;
         }
 
-        this.#onFieldValueChange(name as string, field, arrayValue);
+        this.#onFieldValueChange(field, arrayValue, previousData, { start: fromIndex, end: fromIndex + 1, extraIndex: toIndex });
     }
 
     moveItem(
@@ -867,13 +1001,26 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         arrayValue.splice(toIndex, 0, removedItems[0]);
 
+        const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
+
+        const lastIndex = currentValue.length - 1;
+        const from = fromIndex < 0 ? Math.max(currentValue.length + fromIndex, 0) : fromIndex;
+        const to = toIndex < 0 ? Math.max(lastIndex + toIndex, 0) : Math.min(toIndex, lastIndex);
+
+        const entries = getObjectValue<ItemNode[]>(this.#fieldEntries as any, field.path);
+        if(Array.isArray(entries) && from !== to && (from < entries.length || to < entries.length)) {
+            if(entries.length <= Math.max(from, to)) {
+                entries.length = Math.max(from, to) + 1;
+            }
+            entries.splice(to, 0, entries.splice(from, 1)[0]);
+        }
 
         if(silent) {
             return;
         }
 
-        this.#onFieldValueChange(name as string, field, arrayValue);
+        this.#onFieldValueChange(field, arrayValue, previousData, { start: Math.min(from, to), end: Math.max(from, to) + 1 });
     }
 
     updateItem<TPath extends ArrayFieldPath<TData>>(
@@ -895,159 +1042,196 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const arrayValue = [...currentValue];
         arrayValue[index] = value;
 
+        const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
 
         if(silent) {
             return;
         }
 
-        this.#onFieldValueChange(name as string, field, arrayValue);
+        this.#onFieldValueChange(field, arrayValue, previousData);
     }
 
-    #getField(name: string): FieldInfo {
-        let field = this.#fields.get(name);
-        if(field == null) {
-            field = {
-                path: getFieldPath(name),
-                state: {
-                    isTouched: false,
-                    isDirty: false,
-                    isValid: true,
-                    isValidated: false,
-                },
-                listenerCount: 0,
-            };
+    #isFormValid() {
+        return this.#invalidCount === 0
+            && (this.#validationResult == null || !this.#validationResult.has(Severity.Error));
+    }
 
+    #addFieldEntry(path: FieldPathPart[]) {
+        const entry = new FieldEntry(path);
+        setObjectValue(this.#fieldEntries as any, path, entry, true);
+        return entry;
+    }
+
+    #getFieldEntry(path: FieldPathPart[]): FieldEntry;
+    #getFieldEntry(path: FieldPathPart[], initialize: true): FieldEntry;
+    #getFieldEntry(path: FieldPathPart[], initialize: boolean): FieldEntry | undefined;
+    #getFieldEntry(path: FieldPathPart[], initialize: boolean = true): FieldEntry | undefined {
+        let entry = getObjectValue<FieldEntry>(this.#fieldEntries as any, path, true);
+        if(entry === undefined && initialize) {
+            entry = this.#addFieldEntry(path);
+            if(this.#dirtyCheckEnabled) {
+                this.#setFieldDirty(entry, this.#isValueDirty(
+                    getObjectValue(this.#data, path),
+                    getObjectValue(this.#initialData, path)));
+            }
+        }
+        return entry;
+    }
+
+    #resetEntriesValidation(listenerOptions: NotifyListenerOptions, isValidated: boolean) {
+        if(this.#validatedCount === 0) {
+            return;
+        }
+
+        this.#processEntries(this.#fieldEntries, (entry) => {
+            if(entry.validationResult == null && entry.state.isValid && !entry.state.isValidated) {
+                return;
+            }
+
+            entry.validationResult = undefined;
+            this.#setFieldState(entry, {
+                ...entry.state,
+                isValid: true,
+                isValidated,
+            });
+        });
+
+        listenerOptions.formValidationChanged();
+        listenerOptions.allFieldsAffected();
+    }
+
+    #insertItemEntries(field: FieldInfo, start: number, count: number, length: number) {
+        const entries = getObjectValue<ItemNode[]>(this.#fieldEntries as any, field.path);
+        if(!Array.isArray(entries) || start >= entries.length || count <= 0) {
+            return;
+        }
+
+        entries.splice(start, 0, ...new Array(count));
+
+        // Entries past the data length belong to no item; without trimming, the array would keep growing
+        // whenever the data is replaced silently between inserts.
+        if(entries.length > length) {
+            for(const trimmedNode of entries.splice(length)) {
+                if(trimmedNode != null) {
+                    this.#resetFieldStates(trimmedNode);
+                }
+            }
+        }
+    }
+
+    #processEntries(root: object, callback: (entry: FieldEntry) => void) {
+        const stack: object[] = [root];
+        while(stack.length > 0) {
+            const node = stack.pop() as Record<string, unknown>;
+
+            if(Array.isArray(node)) {
+                const itemEntry = (node as ItemNode)[INTERNAL_NAME_PREFIX];
+                if(itemEntry !== undefined) {
+                    callback(itemEntry);
+                }
+
+                for (let i = 0; i < node.length; i++) {
+                    const itemNode = node[i];
+                    if(itemNode != null) {
+                        stack.push(itemNode);
+                    }
+                }
+                continue;
+            }
+
+            for(let key in node) {
+                const value = node[key];
+
+                if(value instanceof FieldEntry) {
+                    callback(value);
+                }
+                else if(value != null) {
+                    stack.push(value);
+                }
+            }
+        }
+    }
+
+    #getField(name: string) {
+        let field = this.#fields.get(name);
+        if(field === undefined) {
+            field = new FieldInfo(name);
             this.#fields.set(name, field);
         }
         return field;
     }
 
-    #onFieldValueChange(name: string, field: FieldInfo, value: unknown) {
-
-        const listenerOptions = new NotifyListenerOptions();
-
-        listenerOptions.formDataChanged();
-        listenerOptions.addChangedField(name);
-
-        if(this.#clearFormValidationResultsOnChange && this.#validationResult != null) {
-            this.#validationResult = undefined;
-            listenerOptions.formValidationChanged();
-        }
-
-        if(this.#dirtyCheckEnabled) {
-
-            const fieldIsDirty = !isEqual(
-                value,
-                getObjectValue(this.#initialData, field.path),
-                this.#dirtyCheckNullAsDefault);
-
-            if(fieldIsDirty) {
-                this.#dirtyFields.add(name);
-            }
-            else {
-                this.#dirtyFields.delete(name);
+    #collectInvalidFields(node: Record<string, unknown>, name: string, names: string[]) {
+        if(Array.isArray(node)) {
+            const itemEntry = (node as ItemNode)[INTERNAL_NAME_PREFIX];
+            if(itemEntry !== undefined && !itemEntry.state.isValid) {
+                names.push(name);
             }
 
-            if(field.state.isDirty !== fieldIsDirty) {
-                field.state = {
-                    ...field.state,
-                    isDirty: fieldIsDirty,
+            for(let i = 0; i < node.length; i++) {
+                const itemNode = node[i];
+                if(itemNode != null) {
+                    this.#collectInvalidFields(itemNode as Record<string, unknown>, `${name}[${i}]`, names);
                 }
             }
-
-            const formIsDirty = this.#dirtyFields.size > 0;
-            if(this.#state.isDirty !== formIsDirty) {
-                this.#state = {
-                    ...this.#state,
-                    isDirty: formIsDirty,
-                };
-                listenerOptions.formStateChanged();
-            }
+            return;
         }
 
-        if(this.#trackTouchOnValueChange) {
-            if(!field.state.isTouched) {
-                field.state = {
-                    ...field.state,
-                    isTouched: true,
+        for(const key in node) {
+            const value = node[key];
+
+            if(value instanceof FieldEntry) {
+                if(value.state.isValid) {
+                    continue;
                 }
-                if(!this.#state.isTouched) {
-                    this.#state = {
-                        ...this.#state,
-                        isTouched: true,
-                    };
-                    listenerOptions.formStateChanged();
+
+                if(key === INTERNAL_NAME_PREFIX) {
+                    names.push(name);
                 }
+                else {
+                    names.push(name === "" ? value.lastPartName : `${name}.${value.lastPartName}`);
+                }
+            }
+            else if(value != null) {
+                this.#collectInvalidFields(value as Record<string, unknown>, name === "" ? key : `${name}.${key}`, names);
             }
         }
+    }
 
-        if(this.#validator != null) {
-            if(field.state.isValidated || this.#state.isValidated) {
-                if (this.#isMessageDrivenValidator) {
-                    for (const invalidFieldName of this.#invalidFields) {
-                        const invalidField = this.#fields.get(invalidFieldName);
-                        if (invalidField == null) {
-                            continue;
-                        }
-
-                        invalidField.validationResult = undefined;
-
-                        invalidField.state = {
-                            ...invalidField.state,
-                            isValid: true,
-                            isValidated: true,
-                        };
-                        listenerOptions.formValidationChanged();
-                        listenerOptions.addAffectedField(invalidFieldName);
-                    }
-                    this.#invalidFields.clear();
-                } else if(!field.state.isValid) {
-                    field.state = {
-                        ...field.state,
-                        isValid: true,
-                    };
-                    field.validationResult = undefined;
-                    this.#invalidFields.delete(name);
-                }
-
-                this.#validateField(name, listenerOptions);
-            }
+    #setFieldState(entry: FieldEntry, state: FieldState) {
+        const previousState = entry.state;
+        if(previousState.isValid !== state.isValid) {
+            this.#invalidCount += state.isValid ? -1 : 1;
         }
-        else if(field.state.isValidated) {
-            this.#invalidFields.delete(name);
-            if(field.validationResult != null) {
-                field.validationResult = undefined;
-                listenerOptions.formValidationChanged();
-            }
+        if(previousState.isDirty !== state.isDirty) {
+            this.#dirtyCount += state.isDirty ? 1 : -1;
+        }
+        const hadValidationState = previousState.isValidated || !previousState.isValid;
+        const hasValidationState = state.isValidated || !state.isValid;
+        if(hadValidationState !== hasValidationState) {
+            this.#validatedCount += hasValidationState ? 1 : -1;
+        }
+        entry.state = state;
+    }
 
-            if(!field.state.isValid || field.state.isValidated) {
-                field.state = {
-                    ...field.state,
-                    isValid: true,
-                    isValidated: false,
-                }
-            }
+    #resetFieldStates(root: object) {
+        this.#processEntries(root, (entry) => {
+            this.#setFieldState(entry, defaultFieldState);
+        });
+    }
 
-            if(this.#state.isValidated) {
-                this.#state = {
-                    ...this.#state,
-                    isValidated: false,
-                }
-                listenerOptions.formStateChanged();
-            }
+    #setFieldDirty(entry: FieldEntry, isDirty: boolean) {
+        if(entry.state.isDirty === isDirty) {
+            return false;
         }
 
-        const formIsValid = this.#isFormValid();
-        if(this.#state.isValid !== formIsValid) {
-            this.#state = {
-                ...this.#state,
-                isValid: formIsValid,
-            };
-            listenerOptions.formStateChanged();
-        }
+        this.#setFieldState(entry, {
+            ...entry.state,
+            isDirty,
+        });
 
-        this.#notifyListeners(listenerOptions);
+        return true;
     }
 
     #validateField(name: string, listenerOptions: NotifyListenerOptions) {
@@ -1063,31 +1247,261 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         });
 
         for (let [fieldName, validationResult] of validationResults) {
-            const validatedField = this.#getField(fieldName);
+            if(fieldName == null || fieldName === "") {
+                continue;
+            }
+
+            const field = this.#getField(fieldName);
+            const entry = this.#getFieldEntry(field.path);
             if(validationResult.messages.length > 0) {
-                validatedField.validationResult = validationResult;
+                entry.validationResult = validationResult;
             }
-            else if(validatedField.validationResult != null) {
-                validatedField.validationResult = undefined;
-            }
-
-            const validatedFieldIsValid = !validationResult.has(Severity.Error);
-            if (validatedFieldIsValid) {
-                this.#invalidFields.delete(fieldName);
-            }
-            else {
-                this.#invalidFields.add(fieldName);
+            else if(entry.validationResult != null) {
+                entry.validationResult = undefined;
             }
 
-            validatedField.state = {
-                ...validatedField.state,
-                isValid: validatedFieldIsValid,
+            this.#setFieldState(entry, {
+                ...entry.state,
+                isValid: !validationResult.has(Severity.Error),
                 isValidated: true,
-            }
+            });
 
             listenerOptions.formValidationChanged();
             listenerOptions.addAffectedField(fieldName);
         }
+    }
+
+    #onFieldValueChange(field: FieldInfo, value: unknown, previousData: TData, movedItems?: MovedItems) {
+
+        const listenerOptions = new NotifyListenerOptions();
+
+        listenerOptions.formDataChanged();
+        listenerOptions.addChangedField(field.name);
+
+        if(this.#clearFormValidationResultsOnChange && this.#validationResult != null) {
+            this.#validationResult = undefined;
+            listenerOptions.formValidationChanged();
+        }
+
+        // A missing entry is added clean so the dirty check below sees the change and propagates it to ancestors.
+        const entry = this.#getFieldEntry(field.path, false) ?? this.#addFieldEntry(field.path);
+
+        if(this.#dirtyCheckEnabled) {
+            if(this.#setFieldDirty(entry, this.#isValueDirty(value, getObjectValue(this.#initialData, field.path)))) {
+                const ancestors = this.#getRegisteredAncestors(field);
+                const fieldIsDirty = entry.state.isDirty;
+
+                for(let i = ancestors.length - 1; i >= 0; i--) {
+                    const ancestor = ancestors[i];
+
+                    const ancestorChanged = this.#setFieldDirty(
+                        ancestor.entry,
+                        fieldIsDirty || this.#isValueDirty(ancestor.value, ancestor.initialValue));
+
+                    if(!ancestorChanged) {
+                        break;
+                    }
+
+                    listenerOptions.addAffectedField(field.name.slice(0, ancestor.nameEndIndex));
+                }
+            }
+
+            this.#checkDescendantsAreDirty(field, entry, previousData, movedItems);
+        }
+
+        if(this.#trackTouchOnValueChange) {
+            if(!entry.state.isTouched) {
+                this.#setFieldState(entry, {
+                    ...entry.state,
+                    isTouched: true,
+                });
+                if(!this.#state.isTouched) {
+                    this.#state = {
+                        ...this.#state,
+                        isTouched: true,
+                    };
+                    listenerOptions.formStateChanged();
+                }
+            }
+        }
+
+        if(this.#validator != null) {
+            if(entry.state.isValidated || this.#state.isValidated) {
+                if (this.#isMessageDrivenValidator) {
+                    if(this.#invalidCount > 0) {
+                        this.#processEntries(this.#fieldEntries, (invalidEntry) => {
+                            if(invalidEntry.state.isValid) {
+                                return;
+                            }
+
+                            invalidEntry.validationResult = undefined;
+                            this.#setFieldState(invalidEntry, {
+                                ...invalidEntry.state,
+                                isValid: true,
+                                isValidated: true,
+                            });
+                        });
+                        listenerOptions.formValidationChanged();
+                        listenerOptions.allFieldsAffected();
+                    }
+                } else if(!entry.state.isValid) {
+                    this.#setFieldState(entry, {
+                        ...entry.state,
+                        isValid: true,
+                    });
+                    entry.validationResult = undefined;
+                }
+
+                this.#validateField(field.name, listenerOptions);
+            }
+        }
+        else if(entry.state.isValidated) {
+            if(entry.validationResult != null) {
+                entry.validationResult = undefined;
+                listenerOptions.formValidationChanged();
+            }
+
+            this.#setFieldState(entry, {
+                ...entry.state,
+                isValid: true,
+                isValidated: false,
+            });
+
+            if(this.#state.isValidated) {
+                this.#state = {
+                    ...this.#state,
+                    isValidated: false,
+                }
+                listenerOptions.formStateChanged();
+            }
+        }
+
+        const formIsValid = this.#isFormValid();
+        const formIsDirty = this.#dirtyCount > 0;
+        if(this.#state.isValid !== formIsValid || this.#state.isDirty !== formIsDirty) {
+            this.#state = {
+                ...this.#state,
+                isValid: formIsValid,
+                isDirty: formIsDirty,
+            };
+            listenerOptions.formStateChanged();
+        }
+
+        this.#notifyListeners(listenerOptions);
+    }
+
+    #checkDescendantsAreDirty(field: FieldInfo, entry: FieldEntry, previousData: TData, movedItems: MovedItems | undefined) {
+        const descendantsNode = getObjectValue<object>(this.#fieldEntries as any, field.path);
+        if(descendantsNode == null) {
+            return;
+        }
+
+        if(!entry.state.isDirty) {
+            this.#processEntries(descendantsNode, (descendant) => {
+                if(descendant !== entry) {
+                    this.#setFieldDirty(descendant, false);
+                }
+            });
+            return;
+        }
+
+        const fieldValue = getObjectValue(this.#data, field.path);
+        const previousFieldValue = movedItems === undefined
+            ? getObjectValue(previousData, field.path)
+            : markMovedItems(fieldValue as unknown[], movedItems);
+        if(fieldValue === previousFieldValue) {
+            return;
+        }
+
+        const nodes: any[] = [descendantsNode];
+        const values: any[] = [fieldValue];
+        const previousValues: any[] = [previousFieldValue];
+        const initialValues: any[] = [getObjectValue(this.#initialData, field.path)];
+
+        while(nodes.length > 0) {
+            const node = nodes.pop();
+            const value = values.pop();
+            const previousValue = previousValues.pop();
+            const initialValue = initialValues.pop();
+
+            if(Array.isArray(node)) {
+                const itemEntry: FieldEntry | undefined = (node as any)[INTERNAL_NAME_PREFIX];
+                if(itemEntry !== undefined && itemEntry !== entry) {
+                    this.#setFieldDirty(itemEntry, this.#isValueDirty(value, initialValue));
+                }
+
+                for(let i = 0; i < node.length; i++) {
+                    const itemNode = node[i];
+                    const itemValue = value?.[i];
+                    const previousItemValue = previousValue?.[i];
+                    if(itemNode != null && itemValue !== previousItemValue) {
+                        nodes.push(itemNode);
+                        values.push(itemValue);
+                        previousValues.push(previousItemValue);
+                        initialValues.push(initialValue?.[i]);
+                    }
+                }
+                continue;
+            }
+
+            for(const key in node) {
+                const child = node[key];
+
+                if(child instanceof FieldEntry) {
+                    if(child === entry) {
+                        continue;
+                    }
+
+                    if(key === INTERNAL_NAME_PREFIX) {
+                        this.#setFieldDirty(child, this.#isValueDirty(value, initialValue));
+                    }
+                    else {
+                        const name = child.lastPartName;
+                        const childValue = value?.[name];
+                        if(childValue !== previousValue?.[name]) {
+                            this.#setFieldDirty(child, this.#isValueDirty(childValue, initialValue?.[name]));
+                        }
+                    }
+                }
+                else if(child != null) {
+                    const childValue = value?.[key];
+                    const previousChildValue = previousValue?.[key];
+                    if(childValue !== previousChildValue) {
+                        nodes.push(child);
+                        values.push(childValue);
+                        previousValues.push(previousChildValue);
+                        initialValues.push(initialValue?.[key]);
+                    }
+                }
+            }
+        }
+    }
+
+    #getRegisteredAncestors(field: FieldInfo) {
+        const ancestors: RegisteredAncestor[] = [];
+
+        let node: any = this.#fieldEntries;
+        let value: any = this.#data;
+        let initialValue: any = this.#initialData;
+
+        const lastIndex = field.path.length - 1;
+        for(let i = 0; i < lastIndex; i++) {
+            const part = field.path[i];
+
+            const ancestorEntry: FieldEntry | undefined = part.isArrayItem
+                ? node?.[part.name]?.[INTERNAL_NAME_PREFIX]
+                : node?.[part.internalName!];
+
+            node = node?.[part.name];
+            value = value?.[part.name];
+            initialValue = initialValue?.[part.name];
+
+            if(ancestorEntry !== undefined) {
+                ancestors.push({ entry: ancestorEntry, nameEndIndex: part.nameEndIndex!, value, initialValue });
+            }
+        }
+
+        return ancestors;
     }
 
     #notifyListeners(options: NotifyListenerOptions) {
@@ -1103,89 +1517,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    #isFormValid() {
-        return this.#invalidFields.size == 0 && (this.#validationResult == null || !this.#validationResult.has(Severity.Error));
-    }
-}
-
-class NotifyListenerOptions {
-
-    #formDataChanged: boolean = false;
-    #formStateChanged: boolean = false;
-    #formValidationChanged: boolean = false;
-    #affectedFields: Set<string> = new Set<string>();
-    #changedFields: { name: string, parentNameLength: number }[] = [];
-
-    formDataChanged() {
-        this.#formDataChanged = true;
-    }
-
-    formStateChanged() {
-        this.#formStateChanged = true;
-    }
-
-    formValidationChanged() {
-        this.#formValidationChanged = true;
-    }
-
-    addAffectedField(fieldName: string) {
-        this.#affectedFields.add(fieldName);
-    }
-
-    addChangedField(fieldName: string) {
-        this.#changedFields.push({
-            name: fieldName,
-            parentNameLength: Math.max(fieldName.lastIndexOf("."), fieldName.lastIndexOf("["))
-        });
-    }
-
-    hasChanged() {
-        return this.#formDataChanged
-            || this.#formStateChanged
-            || this.#formValidationChanged
-            || this.#affectedFields.size > 0
-            || this.#changedFields.length > 0;
-    }
-
-    isNotificationNeeded(listener: FormListenerOptions) {
-        if((listener.listenDataChange && this.#formDataChanged)
-            || (listener.listenStateChange && this.#formStateChanged)
-            || (listener.listenValidationChange && this.#formValidationChanged)) {
-            return true;
-        }
-
-        if(listener.fieldName == null) {
-            return false;
-        }
-
-        if(this.#affectedFields.has(listener.fieldName)) {
-            return true;
-        }
-
-        const listenerFieldNameLength = listener.fieldName.length;
-
-        for(const changedField of this.#changedFields) {
-            const changedFieldNameLength = changedField.name.length;
-            if(listenerFieldNameLength === changedFieldNameLength) {
-                if(listener.fieldName === changedField.name) {
-                    return true;
-                }
-            }
-            else if(listenerFieldNameLength === changedField.parentNameLength) {
-                if(changedField.name.startsWith(listener.fieldName)) {
-                    return true;
-                }
-            }
-            else if(listenerFieldNameLength > changedFieldNameLength) {
-                if(listener.fieldName.startsWith(changedField.name)) {
-                    const next = listener.fieldName[changedFieldNameLength];
-                    if(next === "." || next === "[") {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
+    #isValueDirty(value: unknown, initialValue: unknown) {
+        return !isEqual(value, initialValue, this.#dirtyCheckNullAsDefault);
     }
 }

@@ -213,10 +213,18 @@ export type FormValidateResult = {
 
 export type ObjectData = object & { [Symbol.iterator]?: never };
 
+export interface IFieldInfo {
+    name: string;
+    path: FieldPathPart[];
+    listenerCount: number;
+}
+
 export type FieldPathPart = {
     name: string;
+    nameEndIndex?: number;
     isArray?: boolean;
     isArrayItem?: boolean;
+    internalName?: string;
 }
 
 export type FieldState = {
@@ -224,13 +232,6 @@ export type FieldState = {
     isDirty: boolean;
     isValid: boolean;
     isValidated: boolean;
-}
-
-export type FieldInfo = {
-    path: FieldPathPart[];
-    state: FieldState;
-    listenerCount: number;
-    validationResult?: IValidationResult;
 }
 
 export type FieldSnapshot<TValue> = FieldState & {
@@ -301,7 +302,9 @@ interface IFormValidation<TData> {
     getFieldValidationResult<TPath extends FieldPath<TData>>(name: TPath): IValidationResult | undefined;
     
     getFieldValidationMessage<TPath extends FieldPath<TData>>(name: TPath): ValidationMessage | undefined;
-    
+
+    getInvalidFields(): string[];
+
 
 }
 

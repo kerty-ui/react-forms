@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KertyForm } from "../src/lib";
+import { KertyForm, Severity, ValidationResult, type FieldPath } from "../src/lib";
 
 type ListForm = {
     items: string[];
@@ -259,6 +259,17 @@ describe("KertyForm.removeItems", () => {
         form.addFieldListener("items", listener);
 
         form.removeItems("items", 0);
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should notify the array field listener when a removed trailing item has no registered fields", () => {
+        const form = listForm();
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
+        form.addFieldListener("items[2]", () => { });
+
+        form.removeItems("items", [0, 1]);
 
         expect(count.calls).toBe(1);
     });
@@ -574,6 +585,34 @@ describe("KertyForm – array state tracking", () => {
         expect(form.getState().isDirty).toBe(false);
     });
 
+    it("should move the touched state of a later item to its new index when an earlier item is removed", () => {
+        const form = listForm();
+        form.touch("items[2]");
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldState("items[1]").isTouched).toBe(true);
+    });
+
+    it("should clear the touched state at the removed index when the item that moved there was not touched", () => {
+        const form = listForm();
+        form.addFieldListener("items[0]", () => { });
+        form.touch("items[0]");
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldState("items[0]").isTouched).toBe(false);
+    });
+
+    it("should read the moved item's value at its new index when an earlier item is removed", () => {
+        const form = listForm();
+        form.addFieldListener("items[2]", () => { });
+
+        form.removeItems("items", 0);
+
+        expect(form.getFieldValue("items[1]")).toBe("c");
+    });
+
     it("should mark the form touched when an item is appended", () => {
         const form = listForm();
         form.addFieldListener("items", () => { });
@@ -597,5 +636,346 @@ describe("KertyForm – array state tracking", () => {
         form.appendItems("matrix[0]", "b");
 
         expect(form.getData().matrix).toEqual([["a", "b"]]);
+    });
+});
+
+type PersonsForm = {
+    persons: {
+        name: string;
+        surname?: string;
+        email?: string;
+        age?: number;
+        phoneNumbers: string[];
+    }[];
+};
+
+const registeredPersonFields: FieldPath<PersonsForm>[] = [
+    "persons[0]",
+    "persons[0].name",
+    "persons[0].age",
+    "persons[0].phoneNumbers[0]",
+    "persons[1]",
+    "persons[1].name",
+    "persons[1].surname",
+    "persons[1].phoneNumbers[0]",
+    "persons[1].phoneNumbers[1]",
+    "persons[2]",
+    "persons[2].name",
+    "persons[2].surname",
+    "persons[2].email",
+    "persons[2].phoneNumbers[0]",
+    "persons[2].phoneNumbers[1]",
+    "persons[2].phoneNumbers[2]",
+];
+
+const personsForm = () => {
+    const form = new KertyForm<PersonsForm>({
+        data: {
+            persons: [
+                { name: "Anna", age: 30, phoneNumbers: ["111"] },
+                { name: "Ben", surname: "Brown", phoneNumbers: ["211", "212"] },
+                { name: "Cleo", surname: "Clark", email: "cleo@example.com", phoneNumbers: ["311", "312", "313"] },
+            ],
+        },
+    });
+    registeredPersonFields.forEach((fieldName, index) => {
+        form.addFieldListener(fieldName, () => { });
+        form.applyFieldValidationResult(fieldName, new ValidationResult().add({
+            text: `${fieldName} message`,
+            severity: index % 2 === 0 ? Severity.Error : Severity.Warning,
+        }));
+        if(index % 3 === 0) {
+            form.touch(fieldName);
+        }
+    });
+    return form;
+};
+
+const itemFieldState = (form: KertyForm<PersonsForm>, fieldName: FieldPath<PersonsForm>) => {
+    const { isTouched, isValid, isValidated } = form.getFieldState(fieldName);
+    return { isTouched, isValid, isValidated, messages: form.getFieldValidationResult(fieldName)?.messages };
+};
+
+describe("KertyForm.removeItems – moving item field states when the first item is removed", () => {
+    it.each([
+        ["persons[1]", "persons[0]"],
+        ["persons[1].name", "persons[0].name"],
+        ["persons[1].surname", "persons[0].surname"],
+        ["persons[1].phoneNumbers[0]", "persons[0].phoneNumbers[0]"],
+        ["persons[1].phoneNumbers[1]", "persons[0].phoneNumbers[1]"],
+        ["persons[2]", "persons[1]"],
+        ["persons[2].name", "persons[1].name"],
+        ["persons[2].surname", "persons[1].surname"],
+        ["persons[2].email", "persons[1].email"],
+        ["persons[2].phoneNumbers[0]", "persons[1].phoneNumbers[0]"],
+        ["persons[2].phoneNumbers[1]", "persons[1].phoneNumbers[1]"],
+        ["persons[2].phoneNumbers[2]", "persons[1].phoneNumbers[2]"],
+    ] as [FieldPath<PersonsForm>, FieldPath<PersonsForm>][])("should move the state of %s to %s", (oldFieldName, newFieldName) => {
+        const form = personsForm();
+        const oldFieldState = itemFieldState(form, oldFieldName);
+        form.removeItems("persons", 0);
+        expect(itemFieldState(form, newFieldName)).toEqual(oldFieldState);
+    });
+
+    it.each([
+        "persons[0].age",
+        "persons[2]",
+        "persons[2].name",
+        "persons[2].surname",
+        "persons[2].email",
+        "persons[2].phoneNumbers[0]",
+        "persons[2].phoneNumbers[1]",
+        "persons[2].phoneNumbers[2]",
+    ] as FieldPath<PersonsForm>[])("should leave no state on %s", (fieldName) => {
+        const form = personsForm();
+
+        form.removeItems("persons", 0);
+
+        expect(itemFieldState(form, fieldName)).toEqual({
+            isTouched: false,
+            isValid: true,
+            isValidated: false,
+            messages: undefined,
+        });
+    });
+});
+
+describe("KertyForm.swapItem – swapping item field states when the first and last items are swapped", () => {
+    it.each([
+        ["persons[0]", "persons[2]"],
+        ["persons[0].name", "persons[2].name"],
+        ["persons[0].age", "persons[2].age"],
+        ["persons[0].phoneNumbers[0]", "persons[2].phoneNumbers[0]"],
+        ["persons[2]", "persons[0]"],
+        ["persons[2].name", "persons[0].name"],
+        ["persons[2].surname", "persons[0].surname"],
+        ["persons[2].email", "persons[0].email"],
+        ["persons[2].phoneNumbers[0]", "persons[0].phoneNumbers[0]"],
+        ["persons[2].phoneNumbers[1]", "persons[0].phoneNumbers[1]"],
+        ["persons[2].phoneNumbers[2]", "persons[0].phoneNumbers[2]"],
+    ] as [FieldPath<PersonsForm>, FieldPath<PersonsForm>][])("should move the state of %s to %s", (oldFieldName, newFieldName) => {
+        const form = personsForm();
+        const oldFieldState = itemFieldState(form, oldFieldName);
+
+        form.swapItem("persons", 0, 2);
+
+        expect(itemFieldState(form, newFieldName)).toEqual(oldFieldState);
+    });
+
+    it.each([
+        "persons[0].age",
+        "persons[2].surname",
+        "persons[2].email",
+        "persons[2].phoneNumbers[1]",
+        "persons[2].phoneNumbers[2]",
+    ] as FieldPath<PersonsForm>[])("should leave no state on %s", (fieldName) => {
+        const form = personsForm();
+
+        form.swapItem("persons", 0, 2);
+
+        expect(itemFieldState(form, fieldName)).toEqual({
+            isTouched: false,
+            isValid: true,
+            isValidated: false,
+            messages: undefined,
+        });
+    });
+});
+
+describe("KertyForm.moveItem – moving item field states when the first item is moved to the end", () => {
+    it.each([
+        ["persons[0]", "persons[2]"],
+        ["persons[0].name", "persons[2].name"],
+        ["persons[0].age", "persons[2].age"],
+        ["persons[0].phoneNumbers[0]", "persons[2].phoneNumbers[0]"],
+        ["persons[1]", "persons[0]"],
+        ["persons[1].name", "persons[0].name"],
+        ["persons[1].surname", "persons[0].surname"],
+        ["persons[1].phoneNumbers[0]", "persons[0].phoneNumbers[0]"],
+        ["persons[1].phoneNumbers[1]", "persons[0].phoneNumbers[1]"],
+        ["persons[2]", "persons[1]"],
+        ["persons[2].name", "persons[1].name"],
+        ["persons[2].surname", "persons[1].surname"],
+        ["persons[2].email", "persons[1].email"],
+        ["persons[2].phoneNumbers[0]", "persons[1].phoneNumbers[0]"],
+        ["persons[2].phoneNumbers[1]", "persons[1].phoneNumbers[1]"],
+        ["persons[2].phoneNumbers[2]", "persons[1].phoneNumbers[2]"],
+    ] as [FieldPath<PersonsForm>, FieldPath<PersonsForm>][])("should move the state of %s to %s", (oldFieldName, newFieldName) => {
+        const form = personsForm();
+        const oldFieldState = itemFieldState(form, oldFieldName);
+
+        form.moveItem("persons", 0, 2);
+
+        expect(itemFieldState(form, newFieldName)).toEqual(oldFieldState);
+    });
+
+    it.each([
+        "persons[0].age",
+        "persons[2].surname",
+        "persons[2].email",
+        "persons[2].phoneNumbers[1]",
+        "persons[2].phoneNumbers[2]",
+    ] as FieldPath<PersonsForm>[])("should leave no state on %s", (fieldName) => {
+        const form = personsForm();
+
+        form.moveItem("persons", 0, 2);
+
+        expect(itemFieldState(form, fieldName)).toEqual({
+            isTouched: false,
+            isValid: true,
+            isValidated: false,
+            messages: undefined,
+        });
+    });
+});
+
+describe("KertyForm.moveItem – moving item field states when the last item is moved to the start", () => {
+    it.each([
+        ["persons[2]", "persons[0]"],
+        ["persons[2].name", "persons[0].name"],
+        ["persons[2].surname", "persons[0].surname"],
+        ["persons[2].email", "persons[0].email"],
+        ["persons[2].phoneNumbers[0]", "persons[0].phoneNumbers[0]"],
+        ["persons[2].phoneNumbers[1]", "persons[0].phoneNumbers[1]"],
+        ["persons[2].phoneNumbers[2]", "persons[0].phoneNumbers[2]"],
+        ["persons[0]", "persons[1]"],
+        ["persons[0].name", "persons[1].name"],
+        ["persons[0].age", "persons[1].age"],
+        ["persons[0].phoneNumbers[0]", "persons[1].phoneNumbers[0]"],
+        ["persons[1]", "persons[2]"],
+        ["persons[1].name", "persons[2].name"],
+        ["persons[1].surname", "persons[2].surname"],
+        ["persons[1].phoneNumbers[0]", "persons[2].phoneNumbers[0]"],
+        ["persons[1].phoneNumbers[1]", "persons[2].phoneNumbers[1]"],
+    ] as [FieldPath<PersonsForm>, FieldPath<PersonsForm>][])("should move the state of %s to %s", (oldFieldName, newFieldName) => {
+        const form = personsForm();
+        const oldFieldState = itemFieldState(form, oldFieldName);
+
+        form.moveItem("persons", 2, 0);
+
+        expect(itemFieldState(form, newFieldName)).toEqual(oldFieldState);
+    });
+
+    it.each([
+        "persons[0].age",
+        "persons[1].surname",
+        "persons[1].phoneNumbers[1]",
+        "persons[2].email",
+        "persons[2].phoneNumbers[2]",
+    ] as FieldPath<PersonsForm>[])("should leave no state on %s", (fieldName) => {
+        const form = personsForm();
+
+        form.moveItem("persons", 2, 0);
+
+        expect(itemFieldState(form, fieldName)).toEqual({
+            isTouched: false,
+            isValid: true,
+            isValidated: false,
+            messages: undefined,
+        });
+    });
+});
+
+describe("KertyForm.insertItems – moving item field states when an item is inserted in the middle", () => {
+    it.each([
+        ["persons[0]", "persons[0]"],
+        ["persons[0].name", "persons[0].name"],
+        ["persons[0].age", "persons[0].age"],
+        ["persons[0].phoneNumbers[0]", "persons[0].phoneNumbers[0]"],
+        ["persons[1]", "persons[2]"],
+        ["persons[1].name", "persons[2].name"],
+        ["persons[1].surname", "persons[2].surname"],
+        ["persons[1].phoneNumbers[0]", "persons[2].phoneNumbers[0]"],
+        ["persons[1].phoneNumbers[1]", "persons[2].phoneNumbers[1]"],
+        ["persons[2]", "persons[3]"],
+        ["persons[2].name", "persons[3].name"],
+        ["persons[2].surname", "persons[3].surname"],
+        ["persons[2].email", "persons[3].email"],
+        ["persons[2].phoneNumbers[0]", "persons[3].phoneNumbers[0]"],
+        ["persons[2].phoneNumbers[1]", "persons[3].phoneNumbers[1]"],
+        ["persons[2].phoneNumbers[2]", "persons[3].phoneNumbers[2]"],
+    ] as [FieldPath<PersonsForm>, FieldPath<PersonsForm>][])("should move the state of %s to %s", (oldFieldName, newFieldName) => {
+        const form = personsForm();
+        const oldFieldState = itemFieldState(form, oldFieldName);
+
+        form.insertItems("persons", 1, { name: "Dan", phoneNumbers: [] });
+
+        expect(itemFieldState(form, newFieldName)).toEqual(oldFieldState);
+    });
+
+    it.each([
+        "persons[1]",
+        "persons[1].name",
+        "persons[1].surname",
+        "persons[1].phoneNumbers[0]",
+        "persons[1].phoneNumbers[1]",
+        "persons[2].email",
+        "persons[2].phoneNumbers[2]",
+    ] as FieldPath<PersonsForm>[])("should leave no state on %s", (fieldName) => {
+        const form = personsForm();
+
+        form.insertItems("persons", 1, { name: "Dan", phoneNumbers: [] });
+
+        expect(itemFieldState(form, fieldName)).toEqual({
+            isTouched: false,
+            isValid: true,
+            isValidated: false,
+            messages: undefined,
+        });
+    });
+});
+
+describe("KertyForm.prependItems – moving item field states when two items are prepended", () => {
+    it.each([
+        ["persons[0]", "persons[2]"],
+        ["persons[0].name", "persons[2].name"],
+        ["persons[0].age", "persons[2].age"],
+        ["persons[0].phoneNumbers[0]", "persons[2].phoneNumbers[0]"],
+        ["persons[1]", "persons[3]"],
+        ["persons[1].name", "persons[3].name"],
+        ["persons[1].surname", "persons[3].surname"],
+        ["persons[1].phoneNumbers[0]", "persons[3].phoneNumbers[0]"],
+        ["persons[1].phoneNumbers[1]", "persons[3].phoneNumbers[1]"],
+        ["persons[2]", "persons[4]"],
+        ["persons[2].name", "persons[4].name"],
+        ["persons[2].surname", "persons[4].surname"],
+        ["persons[2].email", "persons[4].email"],
+        ["persons[2].phoneNumbers[0]", "persons[4].phoneNumbers[0]"],
+        ["persons[2].phoneNumbers[1]", "persons[4].phoneNumbers[1]"],
+        ["persons[2].phoneNumbers[2]", "persons[4].phoneNumbers[2]"],
+    ] as [FieldPath<PersonsForm>, FieldPath<PersonsForm>][])("should move the state of %s to %s", (oldFieldName, newFieldName) => {
+        const form = personsForm();
+        const oldFieldState = itemFieldState(form, oldFieldName);
+
+        form.prependItems("persons", [{ name: "Dan", phoneNumbers: [] }, { name: "Eva", phoneNumbers: [] }]);
+
+        expect(itemFieldState(form, newFieldName)).toEqual(oldFieldState);
+    });
+
+    it.each([
+        "persons[0]",
+        "persons[0].name",
+        "persons[0].age",
+        "persons[0].phoneNumbers[0]",
+        "persons[1]",
+        "persons[1].name",
+        "persons[1].surname",
+        "persons[1].phoneNumbers[0]",
+        "persons[1].phoneNumbers[1]",
+        "persons[2].surname",
+        "persons[2].email",
+        "persons[2].phoneNumbers[1]",
+        "persons[2].phoneNumbers[2]",
+    ] as FieldPath<PersonsForm>[])("should leave no state on %s", (fieldName) => {
+        const form = personsForm();
+
+        form.prependItems("persons", [{ name: "Dan", phoneNumbers: [] }, { name: "Eva", phoneNumbers: [] }]);
+
+        expect(itemFieldState(form, fieldName)).toEqual({
+            isTouched: false,
+            isValid: true,
+            isValidated: false,
+            messages: undefined,
+        });
     });
 });

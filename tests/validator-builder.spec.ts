@@ -22,6 +22,10 @@ type ArrayModel = {
     }[];
 };
 
+type NumbersModel = {
+    numbers: number[];
+};
+
 type DeepModel = {
     matrix: string[][];
     nested: {
@@ -201,6 +205,17 @@ describe("ValidatorBuilder – array paths", () => {
         const result = validator.validate({ data: { tags: ["ts", "", ""], items: [] } });
 
         expect([...result.keys()]).toEqual(["tags[1]", "tags[2]"]);
+    });
+
+    it("should attach the message to the failing primitive item when the rule checks the item value", () => {
+        const validator = new ValidatorBuilder<NumbersModel>()
+            .setup((b) => b.validationFor("numbers[]").add({ check: (ctx) => ctx.value === 2, message: "number two is not allowed" }))
+            .build();
+
+        const result = validator.validate({ data: { numbers: [1, 2, 3] } });
+
+        expect([...result.keys()]).toEqual(["numbers[1]"]);
+        expect(firstTextFor(result, "numbers[1]")).toBe("number two is not allowed");
     });
 
     it("should report the failure under the indexed property path when the rule targets an item field", () => {

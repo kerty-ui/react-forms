@@ -1,6 +1,8 @@
-﻿import type { FieldPathPart, ObjectData } from "../types";
+import type { FieldPathPart, ObjectData } from "../types";
+import { INTERNAL_NAME_PREFIX } from "./getFieldPath";
 
-export const getObjectValue = <TValue,>(data: ObjectData | null | undefined, path: FieldPathPart[]): TValue | undefined => {
+export const getObjectValue = <TValue,>(
+    data: ObjectData | null | undefined, path: FieldPathPart[], useInternalName?: boolean): TValue | undefined => {
     if(data == null || path.length === 0) {
         return undefined;
     }
@@ -17,5 +19,12 @@ export const getObjectValue = <TValue,>(data: ObjectData | null | undefined, pat
     }
 
     const lastPart = path[lastIndex];
-    return parentObj[lastPart.name];
+    if(!useInternalName) {
+        return parentObj[lastPart.name];
+    }
+
+    // An array slot is a node holding the item's own internal value alongside its children.
+    return lastPart.isArrayItem
+        ? parentObj[lastPart.name]?.[INTERNAL_NAME_PREFIX]
+        : parentObj[lastPart.internalName!];
 }

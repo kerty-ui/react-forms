@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getFieldPath } from "../src/lib/utils/getFieldPath";
+import { getFieldPath, INTERNAL_NAME_PREFIX } from "../src/lib/utils/getFieldPath";
 import { type FieldPathPart } from "../src/lib";
 
 const expectPath = (fieldName: string, expected: FieldPathPart[]) => {
@@ -482,5 +482,59 @@ describe("getFieldPath – complex real-world examples", () => {
             getFieldPath(input);
             expect(input).toBe(originalInput);
         });
+    });
+});
+
+describe("getFieldPath – internal name", () => {
+    it.each([
+        ["name", "#name"],
+        ["person.name", "#name"],
+        ["orders[0].lines[2].sku", "#sku"],
+        ["items[]", "#items"],
+    ])("should set the internal name on the last part when %s is parsed with includeInternalName", (fieldName, expected) => {
+        const path = getFieldPath(fieldName, true);
+
+        expect(path[path.length - 1].internalName).toBe(expected);
+    });
+
+    it("should build the internal name from the internal name prefix", () => {
+        const path = getFieldPath("name", true);
+
+        expect(path[0].internalName).toBe(`${INTERNAL_NAME_PREFIX}name`);
+    });
+
+    it("should set an internal name on intermediate parts when parsed with includeInternalName", () => {
+        const path = getFieldPath("person.address.city", true);
+
+        expect(path.slice(0, -1).map((part) => part.internalName)).toEqual(["#person", "#address"]);
+    });
+
+    it("should not set an internal name when the last part is an array item", () => {
+        const path = getFieldPath("items[0]", true);
+
+        expect(path[path.length - 1].internalName).toBeUndefined();
+    });
+
+    it("should not set an internal name for array items", () => {
+        const path = getFieldPath("items[0][1].childItems[0][1]", true);
+
+        expect(path[0].internalName).toBe("#items");
+        expect(path[1].internalName).toBeUndefined();
+        expect(path[2].internalName).toBeUndefined();
+        expect(path[3].internalName).toBe("#childItems");
+        expect(path[4].internalName).toBeUndefined();
+        expect(path[5].internalName).toBeUndefined();
+    });
+
+    it("should not set an internal name when parsed without includeInternalName", () => {
+        const path = getFieldPath("person.name");
+
+        expect(path[path.length - 1].internalName).toBeUndefined();
+    });
+
+    it("should return an empty path when the field name is null and includeInternalName is set", () => {
+        const path = getFieldPath(null as unknown as string, true);
+
+        expect(path).toEqual([]);
     });
 });

@@ -7,8 +7,9 @@ const CHAR_EMPTY_SPACE = 32;
 const CHAR_DIGIT_0 = 48;
 const CHAR_DIGIT_9 = 57;
 
-export const getFieldPath = (fieldName: string): FieldPathPart[] => {
+export let INTERNAL_NAME_PREFIX = "#";
 
+export const getFieldPath = (fieldName: string, includeInternalName: boolean = false): FieldPathPart[] => {
     const path: FieldPathPart[] = [];
 
     if (fieldName == null) {
@@ -31,6 +32,10 @@ export const getFieldPath = (fieldName: string): FieldPathPart[] => {
                 parentProp = {
                     name: fieldName.slice(currentPropIndex, i),
                 };
+                if(includeInternalName) {
+                    parentProp.internalName = INTERNAL_NAME_PREFIX + parentProp.name;
+                    parentProp.nameEndIndex = i;
+                }
                 path.push(parentProp);
                 currentPropIsNumeric = true;
             }
@@ -62,6 +67,10 @@ export const getFieldPath = (fieldName: string): FieldPathPart[] => {
                 };
             }
 
+            if(includeInternalName) {
+                parentProp.nameEndIndex = i + 1;
+            }
+
             path.push(parentProp);
 
             currentPropIndex = i + 1;
@@ -72,9 +81,14 @@ export const getFieldPath = (fieldName: string): FieldPathPart[] => {
     }
 
     if(currentPropIndex < fieldName.length) {
-        path.push({
+        const lastPart = {
             name: fieldName.slice(currentPropIndex),
-        });
+        } as FieldPathPart;
+        if(includeInternalName) {
+            lastPart.internalName = INTERNAL_NAME_PREFIX + lastPart.name;
+            lastPart.nameEndIndex = fieldName.length;
+        }
+        path.push(lastPart);
     }
 
     return path;
