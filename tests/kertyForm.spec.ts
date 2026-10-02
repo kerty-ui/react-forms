@@ -35,6 +35,16 @@ describe("KertyForm – construction", () => {
         expect(form.getData()).not.toBe(data);
     });
 
+    it("should keep the dirty baseline when the caller mutates the given data after construction", () => {
+        const data = { username: "bob", password: "pw" };
+        const form = new KertyForm<LoginForm>({ data });
+        data.username = "alice";
+
+        form.setFieldValue("username", "alice");
+
+        expect(form.getFieldState("username").isDirty).toBe(true);
+    });
+
     it("should start in a pristine state when constructed", () => {
         const form = new KertyForm<LoginForm>({});
 
@@ -939,6 +949,17 @@ describe("KertyForm.reset", () => {
         form.setFieldValue("a", 9);
 
         expect(form.getState().isDirty).toBe(false);
+    });
+
+    it("should keep the dirty baseline when the caller mutates the object passed to reset", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const data = { a: 9 };
+        form.reset(data);
+        data.a = 5;
+
+        form.setFieldValue("a", 5);
+
+        expect(form.getFieldState("a").isDirty).toBe(true);
     });
 
     it("should notify every listener when called", () => {
