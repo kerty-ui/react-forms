@@ -590,6 +590,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#invalidCount = 0;
         this.#validatedCount = 0;
         this.#validationResult = undefined;
+        this.#ruleSet = undefined;
 
         if(data != null) {
             this.#initialData = structuredClone(data);

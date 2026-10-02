@@ -1212,6 +1212,24 @@ describe("KertyForm.reset – validation", () => {
 
         expect(form.getState().isValid).toBe(true);
     });
+
+    it("should not reuse the rule set of the last validate after the form is reset", () => {
+        const ruleSets: (string | null | undefined)[] = [];
+        const form = mountedForm({
+            mode: "fieldDriven",
+            validate: ({ ruleSet }: { ruleSet?: string | null }) => {
+                ruleSets.push(ruleSet);
+                return new Map();
+            },
+        });
+        form.validate("login");
+        form.reset();
+        form.applyFieldValidationResult("username", error("Taken"));
+
+        form.setFieldValue("username", "bob");
+
+        expect(ruleSets.at(-1)).toBeUndefined();
+    });
 });
 
 // ─── setValidator ────────────────────────────────────────────────────────────
