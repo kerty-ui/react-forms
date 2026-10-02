@@ -1407,14 +1407,6 @@ describe("KertyForm.removeItems – clearing validation of removed items", () =>
         expect(form.getFieldValidationMessage("items")).toBeUndefined();
     });
 
-    it("should keep the message of the array field when an item is removed in silent mode", () => {
-        const form = catalogForm(3, ["items"]);
-
-        form.removeItems("items", 1, true);
-
-        expect(form.getFieldValidationMessage("items")?.text).toBe("items is invalid");
-    });
-
     it("should clear the message of a removed nested array item that has its own items registered", () => {
         const form = catalogForm(0, ["matrix[0]", "matrix[0][1]"]);
 
@@ -1484,6 +1476,53 @@ describe("KertyForm.removeItems – moving validation of later items", () => {
         form.removeItems("items", 0);
 
         expect(form.getFieldValidationMessage("items[2].name")).toBeUndefined();
+    });
+});
+
+describe("KertyForm – silent changes", () => {
+    it("should clear the field message when a validated field becomes valid", () => {
+        const form = mountedForm(requiredLoginValidator());
+        form.validate();
+
+        form.setFieldValue("username", "bob", true);
+
+        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+    });
+
+    it("should restore the field message when a validated field becomes invalid again", () => {
+        const form = mountedForm(requiredLoginValidator());
+        form.validate();
+        form.setFieldValue("username", "bob");
+
+        form.setFieldValue("username", "", true);
+
+        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
+    });
+
+    it("should clear an applied field message when the field changes without a validator", () => {
+        const form = mountedForm();
+        form.applyFieldValidationResult("username", error("Taken"));
+
+        form.setFieldValue("username", "alice", true);
+
+        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+    });
+
+    it("should make the form valid when the last invalid field changes without a validator", () => {
+        const form = mountedForm();
+        form.applyFieldValidationResult("username", error("Taken"));
+
+        form.setFieldValue("username", "alice", true);
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it("should clear the message of the array field when an item is removed", () => {
+        const form = catalogForm(3, ["items"]);
+
+        form.removeItems("items", 1, true);
+
+        expect(form.getFieldValidationMessage("items")).toBeUndefined();
     });
 });
 

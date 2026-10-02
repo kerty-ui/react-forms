@@ -280,15 +280,6 @@ describe("KertyForm.setFieldValue", () => {
 
         expect(form.getData().a).toBe(2);
     });
-
-    it("should not update the form state when called in silent mode", () => {
-        const form = new KertyForm<any>({ data: { a: 1 } });
-        register(form, "a");
-
-        form.setFieldValue("a", 2, true);
-
-        expect(form.getState()).toEqual({ isTouched: false, isDirty: false, isValid: true, isValidated: false });
-    });
 });
 
 describe("KertyForm.clearFieldValue", () => {
@@ -734,14 +725,6 @@ describe("KertyForm – dirty state of registered descendants", () => {
         expect(form.getFieldState("person.name").isDirty).toBe(false);
     });
 
-    it("should not mark a child dirty when its parent is replaced silently", () => {
-        const form = personForm(["person", "person.name"]);
-
-        form.setFieldValue("person", { name: "Armands", surname: "Smith" }, true);
-
-        expect(form.getFieldState("person.name").isDirty).toBe(false);
-    });
-
     it.each([
         {
             operation: "prependItems",
@@ -837,6 +820,81 @@ describe("KertyForm – dirty tracking when a field unsubscribes", () => {
     });
 });
 
+describe("KertyForm – silent changes", () => {
+    it("should mark the field dirty when a registered field changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        register(form, "a");
+
+        form.setFieldValue("a", 2, true);
+
+        expect(form.getFieldState("a").isDirty).toBe(true);
+    });
+
+    it("should mark the form dirty when a registered field changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        register(form, "a");
+
+        form.setFieldValue("a", 2, true);
+
+        expect(form.getState().isDirty).toBe(true);
+    });
+
+    it("should mark the form dirty when an unregistered field changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+
+        form.setFieldValue("a", 2, true);
+
+        expect(form.getState().isDirty).toBe(true);
+    });
+
+    it("should make the form clean again when a dirty field is reverted to its initial value", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        register(form, "a");
+        form.setFieldValue("a", 2);
+
+        form.setFieldValue("a", 1, true);
+
+        expect(form.getState().isDirty).toBe(false);
+    });
+
+    it("should mark a registered child dirty when its parent is replaced with a different child value", () => {
+        const form = new KertyForm<any>({ data: { person: { name: "John", surname: "Smith" } } });
+        register(form, "person");
+        register(form, "person.name");
+
+        form.setFieldValue("person", { name: "Armands", surname: "Smith" }, true);
+
+        expect(form.getFieldState("person.name").isDirty).toBe(true);
+    });
+
+    it("should mark the field dirty when an item is appended to a registered array", () => {
+        const form = new KertyForm<any>({ data: { items: ["a"] } });
+        register(form, "items");
+
+        form.appendItems("items", "b", true);
+
+        expect(form.getFieldState("items").isDirty).toBe(true);
+    });
+
+    it("should not mark the field touched when a registered field changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        register(form, "a");
+
+        form.setFieldValue("a", 2, true);
+
+        expect(form.getFieldState("a").isTouched).toBe(false);
+    });
+
+    it("should not mark the form touched when a registered field changes", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        register(form, "a");
+
+        form.setFieldValue("a", 2, true);
+
+        expect(form.getState().isTouched).toBe(false);
+    });
+});
+
 describe("KertyForm – field state without listeners", () => {
     const error = (text: string) => new ValidationResult().add({ text, severity: Severity.Error });
 
@@ -899,26 +957,6 @@ describe("KertyForm – field state without listeners", () => {
         const state = form.getFieldState("a");
 
         expect(state.isDirty).toBe(true);
-    });
-
-    it("should return the same state object on repeated reads when the field was changed silently", () => {
-        const form = new KertyForm<any>({ data: { a: 1 } });
-        form.setFieldValue("a", 2, true);
-        const before = form.getFieldState("a");
-
-        const after = form.getFieldState("a");
-
-        expect(after).toBe(before);
-    });
-
-    it("should keep the form clean after a later change when a silently changed field was only read", () => {
-        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
-        form.setFieldValue("a", 2, true);
-        form.getFieldState("a");
-
-        form.setFieldValue("b", 1);
-
-        expect(form.getState().isDirty).toBe(false);
     });
 });
 
@@ -1217,17 +1255,5 @@ describe("KertyForm.getFieldSnapshot", () => {
         form.setFieldValue("b", 2);
 
         expect(snapshot()).toBe(before);
-    });
-
-    it("should return the same object when a listener subscribes after a read of a silently changed field", () => {
-        const form = new KertyForm<any>({ data: { a: 1 } });
-        form.setFieldValue("a", 2, true);
-        const snapshot = form.getFieldSnapshot("a");
-        const before = snapshot();
-        register(form, "a");
-
-        const after = snapshot();
-
-        expect(after).toBe(before);
     });
 });

@@ -530,32 +530,23 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     setFieldValue<TValue>(name: FieldPathByValue<TData, TValue>, value: TValue | null | undefined, silent?: boolean): void;
     setFieldValue<TPath extends FieldPath<TData>>(name: TPath, value: FieldPathValue<TData, TPath> | null | undefined, silent?: boolean): void;
     setFieldValue(name: string, value: unknown, silent: boolean = false) {
-
         const field = this.#getField(name as string);
-
         const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, value);
-
-        if(silent) {
-            return;
-        }
-
-        this.#onFieldValueChange(field, value, previousData);
+        this.#onFieldValueChange(field, value, previousData, undefined, silent);
     }
 
-    clearFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent?: boolean) {
+    clearFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent: boolean = false) {
         const fieldNames = Array.isArray(name) ? name : [name];
         for(const fieldName of fieldNames) {
             const field = this.#getField(fieldName as string);
             const previousData = this.#data;
             this.#data = setObjectValueImmutable(this.#data, field.path, undefined);
-            if(!silent) {
-                this.#onFieldValueChange(field, undefined, previousData);
-            }
+            this.#onFieldValueChange(field, undefined, previousData, undefined, silent);
         }
     }
 
-    removeFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent?: boolean) {
+    removeFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent: boolean = false) {
         const fieldNames = Array.isArray(name) ? name : [name];
         for(const fieldName of fieldNames) {
             const field = this.#getField(fieldName as string);
@@ -568,8 +559,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             }
             const previousData = this.#data;
             this.#data = removeObjectValueImmutable(this.#data, field.path);
-            if(!silent && this.#data !== previousData) {
-                this.#onFieldValueChange(field, undefined, previousData);
+            if(this.#data !== previousData) {
+                this.#onFieldValueChange(field, undefined, previousData, undefined, silent);
             }
         }
     }
@@ -905,7 +896,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     prependItems<TPath extends ArrayFieldPath<TData>>(
         name: TPath,
         value: ArrayItemType<TData, TPath> | ArrayItemType<TData, TPath>[],
-        silent?: boolean): void {
+        silent: boolean = false): void {
 
         if(value == null) {
             return;
@@ -924,12 +915,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
 
         this.#insertItemEntries(field, 0, arrayValue.length - currentValue.length, arrayValue.length);
-
-        if(silent) {
-            return;
-        }
-
-        this.#onFieldValueChange(field, arrayValue, previousData, { start: 0, end: arrayValue.length });
+        this.#onFieldValueChange(field, arrayValue, previousData, { start: 0, end: arrayValue.length }, silent);
     }
 
     appendItems<TPath extends ArrayFieldPath<TData>>(
@@ -952,19 +938,14 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
-
-        if(silent) {
-            return;
-        }
-
-        this.#onFieldValueChange(field, arrayValue, previousData);
+        this.#onFieldValueChange(field, arrayValue, previousData, undefined, silent);
     }
 
     insertItems<TPath extends ArrayFieldPath<TData>>(
         name: TPath,
         index: number,
         value: ArrayItemType<TData, TPath> | ArrayItemType<TData, TPath>[],
-        silent?: boolean): void {
+        silent: boolean = false): void {
 
         if(value == null) {
             return;
@@ -993,12 +974,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
 
         this.#insertItemEntries(field, index, arrayValue.length - currentValue.length, arrayValue.length);
-
-        if(silent) {
-            return;
-        }
-
-        this.#onFieldValueChange(field, arrayValue, previousData, { start: index, end: arrayValue.length });
+        this.#onFieldValueChange(field, arrayValue, previousData, { start: index, end: arrayValue.length }, silent);
     }
 
     removeItems(
@@ -1044,19 +1020,21 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             }
         }
 
-        if(silent) {
-            return;
-        }
-
         const firstMoved = removedIndexes[removedIndexes.length - 1];
-        this.#onFieldValueChange(field, arrayValue, previousData, { start: firstMoved, end: arrayValue.length });
+        this.#onFieldValueChange(
+            field,
+            arrayValue,
+            previousData,
+            { start: firstMoved, end: arrayValue.length },
+            silent
+        );
     }
 
     swapItem<TPath extends ArrayFieldPath<TData>>(
         name: TPath,
         fromIndex: number,
         toIndex: number,
-        silent?: boolean): void {
+        silent: boolean = false): void {
         const field = this.#getField(name as string);
 
         const currentValue = getObjectValue(this.#data, field.path) ?? [];
@@ -1083,19 +1061,20 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         if(Array.isArray(entries) && (fromIndex < entries.length || toIndex < entries.length)) {
             [entries[fromIndex], entries[toIndex]] = [entries[toIndex], entries[fromIndex]];
         }
-
-        if(silent) {
-            return;
-        }
-
-        this.#onFieldValueChange(field, arrayValue, previousData, { start: fromIndex, end: fromIndex + 1, extraIndex: toIndex });
+        this.#onFieldValueChange(
+            field,
+            arrayValue,
+            previousData,
+            { start: fromIndex, end: fromIndex + 1, extraIndex: toIndex },
+            silent
+        );
     }
 
     moveItem(
         name: ArrayFieldPath<TData>,
         fromIndex: number,
         toIndex: number,
-        silent?: boolean): void {
+        silent: boolean = false): void {
         const field = this.#getField(name as string);
 
         const currentValue = getObjectValue(this.#data, field.path) ?? [];
@@ -1126,18 +1105,20 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             entries.splice(toIndex, 0, entries.splice(fromIndex, 1)[0]);
         }
 
-        if(silent) {
-            return;
-        }
-
-        this.#onFieldValueChange(field, arrayValue, previousData, { start: Math.min(fromIndex, toIndex), end: Math.max(fromIndex, toIndex) + 1 });
+        this.#onFieldValueChange(
+            field,
+            arrayValue,
+            previousData,
+            { start: Math.min(fromIndex, toIndex), end: Math.max(fromIndex, toIndex) + 1 },
+            silent
+        );
     }
 
     updateItem<TPath extends ArrayFieldPath<TData>>(
         name: TPath,
         index: number,
         value: ArrayItemType<TData, TPath>,
-        silent?: boolean): void {
+        silent: boolean = false): void {
         const field = this.#getField(name as string);
 
         const currentValue = getObjectValue(this.#data, field.path) ?? [];
@@ -1154,17 +1135,11 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
-
-        if(silent) {
-            return;
-        }
-
-        this.#onFieldValueChange(field, arrayValue, previousData);
+        this.#onFieldValueChange(field, arrayValue, previousData, undefined, silent);
     }
 
     #isFormValid() {
-        return this.#invalidCount === 0
-            && (this.#validationResult == null || !this.#validationResult.has(Severity.Error));
+        return this.#invalidCount === 0 && (this.#validationResult == null || !this.#validationResult.has(Severity.Error));
     }
 
     #addFieldEntry(path: FieldPathPart[]) {
@@ -1224,7 +1199,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         entries.splice(start, 0, ...new Array(count));
 
         // Entries past the data length belong to no item; without trimming, the array would keep growing
-        // whenever the data is replaced silently between inserts.
+        // whenever the array is replaced through setFieldValue between inserts.
         if(entries.length > length) {
             for(const trimmedNode of entries.splice(length)) {
                 if(trimmedNode != null) {
@@ -1385,7 +1360,12 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    #onFieldValueChange(field: FieldInfo, value: unknown, previousData: TData, movedItems?: MovedItems) {
+    #onFieldValueChange(
+        field: FieldInfo,
+        value: unknown,
+        previousData: TData,
+        movedItems: MovedItems | undefined,
+        silent: boolean) {
 
         const listenerOptions = new NotifyListenerOptions();
 
@@ -1423,7 +1403,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             this.#checkDescendantsAreDirty(field, entry, previousData, movedItems);
         }
 
-        if(this.#trackTouchOnValueChange) {
+        if(!silent && this.#trackTouchOnValueChange) {
             if(!entry.state.isTouched) {
                 this.#setFieldState(entry, {
                     ...entry.state,
@@ -1505,7 +1485,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             listenerOptions.formStateChanged();
         }
 
-        this.#notifyListeners(listenerOptions);
+        if(!silent) {
+            this.#notifyListeners(listenerOptions);
+        }
     }
 
     #checkDescendantsAreDirty(field: FieldInfo, entry: FieldEntry, previousData: TData, movedItems: MovedItems | undefined) {
