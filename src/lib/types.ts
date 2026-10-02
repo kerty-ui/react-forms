@@ -57,6 +57,8 @@ export type ApplyValidationResultMode =
      * - `replace`
      *   Removes all existing validation messages and then adds
      *   the messages provided by the current validation result.
+     *   The result is treated as complete: every field is marked validated,
+     *   so fields without messages count as validated and valid.
      */
     | "replace";
 

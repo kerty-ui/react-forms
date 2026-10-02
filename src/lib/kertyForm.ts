@@ -668,8 +668,6 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         const listenerOptions = new NotifyListenerOptions();
 
-        const formValidationResult = new ValidationResult();
-
         const mode = options?.mode ?? "patch";
         const ignoreUnknownFields = options?.unknownFieldBehavior === "ignore";
 
@@ -681,24 +679,29 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
             this.#resetEntriesValidation(listenerOptions, true);
         }
-        else {
-            if(validationResults.size === 0){
-                return;
-            }
-
-            if (this.#validationResult != null) {
-                formValidationResult.merge(this.#validationResult);
-            }
+        else if(validationResults.size === 0) {
+            return;
         }
 
         for(let [fieldName, validationResult] of validationResults) {
 
             if(fieldName == null || fieldName === "") {
-                if(mode === "patch") {
-                    formValidationResult.replace(validationResult);
+                const formValidationResult = new ValidationResult();
+                if(mode === "merge") {
+                    if(validationResult.messages.length === 0) {
+                        continue;
+                    }
+                    formValidationResult.merge(this.#validationResult);
                 }
-                else {
-                    formValidationResult.merge(validationResult);
+                formValidationResult.merge(validationResult);
+
+                if(formValidationResult.messages.length > 0) {
+                    this.#validationResult = formValidationResult;
+                    listenerOptions.formValidationChanged();
+                }
+                else if(this.#validationResult != null) {
+                    this.#validationResult = undefined;
+                    listenerOptions.formValidationChanged();
                 }
                 continue;
             }
@@ -727,6 +730,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                     isValid: true,
                     isValidated: true,
                 });
+                listenerOptions.formValidationChanged();
                 listenerOptions.addAffectedField(fieldName);
             }
             else {
@@ -736,17 +740,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                     isValid: !fieldValidationResult.has(Severity.Error),
                     isValidated: true,
                 });
+                listenerOptions.formValidationChanged();
                 listenerOptions.addAffectedField(fieldName);
             }
-        }
-
-        if(formValidationResult.messages.length > 0) {
-            this.#validationResult = formValidationResult;
-            listenerOptions.formValidationChanged();
-        }
-        else if(this.#validationResult != null) {
-            this.#validationResult = undefined;
-            listenerOptions.formValidationChanged();
         }
 
         const formIsValid = this.#isFormValid();

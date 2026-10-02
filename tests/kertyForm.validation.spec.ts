@@ -1060,6 +1060,27 @@ describe("KertyForm.applyValidationResults", () => {
 
         expect(form.getState().isValid).toBe(true);
     });
+
+    it("should notify a validation listener when only a field result changes", () => {
+        const form = mountedForm();
+        form.applyFieldValidationResult("username", warning("Weak"));
+        let calls = 0;
+        form.addListener(() => { calls++; }, { listenDataChange: false, listenStateChange: false, listenValidationChange: true });
+
+        form.applyFieldValidationResult("username", warning("Still weak"));
+
+        expect(calls).toBe(1);
+    });
+
+    it.each(["patch", "merge"] as const)("should keep the form result reference when only field results are applied in %s mode", mode => {
+        const form = mountedForm();
+        form.applyValidationResult(error("Login failed"));
+        const formResult = form.getValidationResult();
+
+        form.applyFieldValidationResult("username", error("Taken"), { mode });
+
+        expect(form.getValidationResult()).toBe(formResult);
+    });
 });
 
 describe("KertyForm.resetValidationResults", () => {
