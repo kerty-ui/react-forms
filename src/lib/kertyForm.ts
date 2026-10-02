@@ -1341,21 +1341,25 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         if(this.#validator != null) {
             if(entry.state.isValidated || this.#state.isValidated) {
                 if (this.#isMessageDrivenValidator) {
-                    if(this.#invalidCount > 0) {
-                        this.#processEntries(this.#fieldEntries, (invalidEntry) => {
-                            if(invalidEntry.state.isValid) {
+                    if(this.#validatedCount > 0) {
+                        let isAnyFieldCleared = false;
+                        this.#processEntries(this.#fieldEntries, (validatedEntry) => {
+                            if(validatedEntry.validationResult == null && validatedEntry.state.isValid) {
                                 return;
                             }
 
-                            invalidEntry.validationResult = undefined;
-                            this.#setFieldState(invalidEntry, {
-                                ...invalidEntry.state,
+                            validatedEntry.validationResult = undefined;
+                            this.#setFieldState(validatedEntry, {
+                                ...validatedEntry.state,
                                 isValid: true,
                                 isValidated: true,
                             });
+                            isAnyFieldCleared = true;
                         });
-                        listenerOptions.formValidationChanged();
-                        listenerOptions.allFieldsAffected();
+                        if(isAnyFieldCleared) {
+                            listenerOptions.formValidationChanged();
+                            listenerOptions.allFieldsAffected();
+                        }
                     }
                 } else if(!entry.state.isValid) {
                     this.#setFieldState(entry, {

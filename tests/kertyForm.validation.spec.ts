@@ -693,6 +693,38 @@ describe("KertyForm – messageDriven revalidation on change", () => {
 
         expect(form.getFieldValidationMessage("username")).toBeUndefined();
     });
+
+    it.each([
+        ["a warning", Severity.Warning],
+        ["an info", Severity.Info],
+    ] as const)("should clear %s message when the validator stops returning it after a change", (_, severity) => {
+        const form = mountedForm(new SingleMessageDrivenValidator<Partial<LoginForm>>((result, { data }) => {
+            if (!data.username) result.setFieldMessage("username", "Username is recommended", severity);
+        }));
+        form.validate();
+
+        form.setFieldValue("username", "bob");
+
+        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+    });
+
+    it("should notify another field's listener when a change clears that field's message", () => {
+        type PasswordForm = { password: string; confirmPassword: string };
+        const form = new KertyForm<PasswordForm>({
+            data: { password: "a", confirmPassword: "b" },
+            validator: new SingleMessageDrivenValidator<PasswordForm>((result, { data }) => {
+                if (data.password !== data.confirmPassword) result.setFieldMessage("confirmPassword", "Passwords don't match");
+            }),
+        });
+        let confirmPasswordCalls = 0;
+        form.addFieldListener("confirmPassword", () => { confirmPasswordCalls++; });
+        form.validate();
+        const before = confirmPasswordCalls;
+
+        form.setFieldValue("password", "b");
+
+        expect(confirmPasswordCalls).toBe(before + 1);
+    });
 });
 
 // ─── applying results from outside ───────────────────────────────────────────
