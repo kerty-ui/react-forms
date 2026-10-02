@@ -806,11 +806,10 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
 
         const formIsValid = this.#isFormValid();
-        if(this.#state.isValid !== formIsValid || this.#state.isValidated) {
+        if(this.#state.isValid !== formIsValid) {
             this.#state = {
                 ...this.#state,
                 isValid: formIsValid,
-                isValidated: false,
             };
             listenerOptions.formStateChanged();
         }

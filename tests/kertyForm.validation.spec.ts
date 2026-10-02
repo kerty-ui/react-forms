@@ -1155,6 +1155,32 @@ describe("KertyForm.resetValidationResults", () => {
 
         expect(form.getValidationMessage()?.text).toBe("Login failed");
     });
+
+    it("should keep the form validated when only one field is reset", () => {
+        const form = mountedForm(requiredLoginValidator());
+        form.validate();
+
+        form.resetFieldValidationResults("username");
+
+        expect(form.getState().isValidated).toBe(true);
+    });
+
+    it("should still validate a field that mounts after another field was reset", () => {
+        const form = new KertyForm<any>({
+            data: { items: [{ name: "a" }] },
+            validator: new Validator<any>({
+                items: [{ _name: new FieldValidations({ check: isTextEmpty, message: "Name is required" }) }],
+            }),
+        });
+        form.addFieldListener("items[0].name", () => { });
+        form.validate();
+        form.resetFieldValidationResults("items[0].name");
+        form.appendItems("items", { name: "" });
+
+        form.addFieldListener("items[1].name", () => { });
+
+        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("Name is required");
+    });
 });
 
 // ─── reset clears validation ─────────────────────────────────────────────────
