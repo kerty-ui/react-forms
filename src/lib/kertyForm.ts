@@ -688,8 +688,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             fieldValidationResult.merge(validationResult);
 
             if(validationResult.messages.length === 0) {
-                if(entry.validationResult == null ||
-                    (entry.state.isValid && entry.state.isValidated)) {
+                if(entry.validationResult == null && entry.state.isValid) {
                     continue;
                 }
 
@@ -714,6 +713,10 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         if(formValidationResult.messages.length > 0) {
             this.#validationResult = formValidationResult;
+            listenerOptions.formValidationChanged();
+        }
+        else if(this.#validationResult != null) {
+            this.#validationResult = undefined;
             listenerOptions.formValidationChanged();
         }
 

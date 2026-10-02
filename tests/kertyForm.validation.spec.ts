@@ -781,6 +781,24 @@ describe("KertyForm.applyValidationResult", () => {
         expect(form.getValidationMessage()?.text).toBe("First");
     });
 
+    it("should clear the form result when an empty result is applied in patch mode", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {} });
+        form.applyValidationResult(error("Login failed"));
+
+        form.applyValidationResult(new ValidationResult());
+
+        expect(form.getValidationResult()).toBeUndefined();
+    });
+
+    it("should make the form valid when an empty result replaces a form error in patch mode", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {} });
+        form.applyValidationResult(error("Login failed"));
+
+        form.applyValidationResult(new ValidationResult());
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
     it("should drop the form result when a field value changes afterwards", () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: {} });
         form.applyValidationResult(error("Login failed"));
@@ -841,6 +859,15 @@ describe("KertyForm.applyFieldValidationResult", () => {
         form.applyFieldValidationResult("username", error("Second"), { mode: "merge" });
 
         expect(form.getFieldValidationResult("username")?.messages.map(m => m.text)).toEqual(["First", "Second"]);
+    });
+
+    it("should clear a warning when an empty result is applied in patch mode", () => {
+        const form = mountedForm();
+        form.applyFieldValidationResult("username", warning("Weak"));
+
+        form.applyFieldValidationResult("username", new ValidationResult());
+
+        expect(form.getFieldValidationResult("username")).toBeUndefined();
     });
 });
 
