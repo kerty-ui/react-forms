@@ -5,7 +5,7 @@ import { SingleMessageDrivenValidator } from "../src/lib/validation/singleMessag
 import { ValidatorBuilder } from "../src/lib/validation/validatorBuilder";
 import { ValidationResult } from "../src/lib/validation/validationResult";
 import { Validations } from "../src/lib/validation/validations";
-import { Severity, type FieldPath } from "../src/lib/types";
+import { Severity, type FieldPath, type IKertyForm } from "../src/lib/types";
 
 type LoginForm = {
     username: string;
@@ -1225,12 +1225,21 @@ describe("KertyForm.setValidator", () => {
         expect(form.validate().isValid).toBe(false);
     });
 
-    it("should keep the current validator when null is passed", () => {
-        const form = mountedForm(requiredLoginValidator());
+    it("should remove the validator when undefined is passed", () => {
+        const form: IKertyForm<Partial<LoginForm>> = mountedForm(requiredLoginValidator());
 
         form.setValidator(undefined);
 
-        expect(form.validate().isValid).toBe(false);
+        expect(form.validate().isValid).toBe(true);
+    });
+
+    it("should keep the existing messages when the validator is removed", () => {
+        const form = mountedForm(requiredLoginValidator());
+        form.validate();
+
+        form.setValidator(undefined);
+
+        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
     });
 });
 

@@ -85,6 +85,57 @@ describe("KertyForm – configuration", () => {
         expect(form.getState().isDirty).toBe(false);
     });
 
+    it("should clear the field dirty flag when dirty checking is disabled at runtime", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        register(form, "a");
+        form.setFieldValue("a", 2);
+
+        form.updateConfiguration({ dirtyCheckEnabled: false });
+
+        expect(form.getFieldState("a").isDirty).toBe(false);
+    });
+
+    it("should clear the form dirty flag when dirty checking is disabled at runtime", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        register(form, "a");
+        form.setFieldValue("a", 2);
+
+        form.updateConfiguration({ dirtyCheckEnabled: false });
+
+        expect(form.getState().isDirty).toBe(false);
+    });
+
+    it("should mark a changed field dirty when dirty checking is enabled at runtime", () => {
+        const form = new KertyForm<any>({ data: { a: 1 }, dirtyCheckEnabled: false });
+        register(form, "a");
+        form.setFieldValue("a", 2);
+
+        form.updateConfiguration({ dirtyCheckEnabled: true });
+
+        expect(form.getState().isDirty).toBe(true);
+    });
+
+    it("should mark a changed array item dirty when dirty checking is enabled at runtime", () => {
+        const form = new KertyForm<any>({ data: { items: [{ name: "a" }] }, dirtyCheckEnabled: false });
+        register(form, "items[0]");
+        register(form, "items[0].name");
+        form.setFieldValue("items[0].name", "b");
+
+        form.updateConfiguration({ dirtyCheckEnabled: true });
+
+        expect(form.getFieldState("items[0]").isDirty).toBe(true);
+    });
+
+    it("should recompute the dirty flag when dirtyCheckNullAsDefault changes at runtime", () => {
+        const form = new KertyForm<any>({ data: { a: "" } });
+        register(form, "a");
+        form.setFieldValue("a", undefined);
+
+        form.updateConfiguration({ dirtyCheckNullAsDefault: false });
+
+        expect(form.getFieldState("a").isDirty).toBe(true);
+    });
+
     it("should not mark the field touched when touch tracking on change is disabled", () => {
         const form = new KertyForm<any>({ data: { a: 1 }, trackTouchOnValueChange: false });
         register(form, "a");

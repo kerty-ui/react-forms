@@ -292,7 +292,7 @@ export type FormListener = FormListenerOptions & {
 
 interface IFormValidation<TData> {
 
-    setValidator(validator: IValidator<TData>): void;
+    setValidator(validator: IValidator<TData> | undefined): void;
 
     validate(ruleSet?: string | null): FormValidateResult;
 

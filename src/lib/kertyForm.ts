@@ -272,6 +272,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             return;
         }
 
+        const dirtyCheckEnabled = this.#dirtyCheckEnabled;
+        const dirtyCheckNullAsDefault = this.#dirtyCheckNullAsDefault;
+
         if(config.dirtyCheckEnabled != null) {
             this.#dirtyCheckEnabled = config.dirtyCheckEnabled;
         }
@@ -287,6 +290,43 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         if(config.keepValidationResultsWithoutListeners != null) {
             this.#keepValidationResultsWithoutListeners = config.keepValidationResultsWithoutListeners;
         }
+
+        if(this.#dirtyCheckEnabled === dirtyCheckEnabled && this.#dirtyCheckNullAsDefault === dirtyCheckNullAsDefault) {
+            return;
+        }
+
+        const listenerOptions = new NotifyListenerOptions();
+
+        const stack: [Record<string, unknown>, any, any][] = [[this.#fieldEntries as any, this.#data, this.#initialData]];
+        while(stack.length > 0) {
+            const [node, value, initialValue] = stack.pop()!;
+            for(const key in node) {
+                const child = node[key];
+                if(child instanceof FieldEntry) {
+                    const name = key.slice(INTERNAL_NAME_PREFIX.length);
+                    const isDirty = this.#dirtyCheckEnabled && (name === ""
+                        ? this.#isValueDirty(value, initialValue)
+                        : this.#isValueDirty(value?.[name], initialValue?.[name]));
+                    if(this.#setFieldDirty(child, isDirty)) {
+                        listenerOptions.allFieldsAffected();
+                    }
+                }
+                else if(child != null) {
+                    stack.push([child as Record<string, unknown>, value?.[key], initialValue?.[key]]);
+                }
+            }
+        }
+
+        const formIsDirty = this.#dirtyCount > 0;
+        if(this.#state.isDirty !== formIsDirty) {
+            this.#state = {
+                ...this.#state,
+                isDirty: formIsDirty,
+            };
+            listenerOptions.formStateChanged();
+        }
+
+        this.#notifyListeners(listenerOptions);
     }
 
     addListener(listener: () => void, options?: FormListenerOptions) {
@@ -569,12 +609,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     setValidator(validator: IValidator<TData> | undefined) {
-        if(validator == null) {
-            return;
-        }
-
         this.#validator = validator;
-        this.#isMessageDrivenValidator = this.#validator != null && this.#validator.mode === "messageDriven";
+        this.#isMessageDrivenValidator = validator?.mode === "messageDriven";
     }
 
     validate(ruleSet?: string | null) {

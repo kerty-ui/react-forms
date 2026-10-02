@@ -104,5 +104,5 @@ ratio should not be trusted without a rerun on an idle machine.
 | `setObjectValue.performance.bench.ts` | Mutable vs immutable writes, data-size scaling, redundant-write guard |
 | `removeObjectValue.performance.bench.ts` | Immutable removal vs `set(undefined)`, array splice position, data-size scaling |
 | `isEqual.performance.bench.ts` | Primitives, arrays, objects, dates, circular refs, `treatNullAsDefault` |
-| `kertyForm.performance.bench.ts` | `KertyForm.setFieldValue` / `prependItems` / `insertItems` / `validate` / `applyValidationResults` / `getInvalidFields` / `reset` by form size, with and without field listeners |
+| `kertyForm.performance.bench.ts` | `KertyForm.setFieldValue` / `prependItems` / `insertItems` / `validate` / `applyValidationResults` / `getInvalidFields` / `reset` / `updateConfiguration` by form size, with and without field listeners |
 | `arrayRender.performance.bench.tsx` | Re-render cost of one name edit in a 1000-row list: `useField(persons)` with plain vs memo rows, `useDataWatch(length)` baseline (`npm run bench:react`) |

@@ -263,6 +263,61 @@ describeDirtyCheckPair("whole collection replaced with different values, 1000 ro
     };
 });
 
+// ── updateConfiguration ────────────────────────────────────────────────────
+
+// Changing a dirty-check option walks every registered field once and
+// recomputes its dirty flag; any other option returns right away. Field counts
+// are cells: 50 fields are 5 rows of 10 cells, plus the rows, the collection and
+// the title, all subscribed. Half of the rows differ from the initial data.
+const UPDATE_CONFIGURATION_FIELDS = [50, 100, 1_000, 10_000] as const;
+
+const createHalfChangedForm = (fields: number, dirtyCheckEnabled: boolean) => {
+    const rows = fields / CELLS_PER_ROW;
+    const form = createForm(rows, "subscribed", "value", undefined, dirtyCheckEnabled);
+    form.setFieldValue("rows", createRows(rows).map((row, index) => index < rows / 2 ? createRow("changed") : row));
+    return form;
+};
+
+const fieldsLabel = (fields: number) => `${fields} fields (${fields / CELLS_PER_ROW} rows)`;
+
+// Two full walks per iteration: turning the check on marks the changed cells,
+// their rows and the collection dirty and notifies the field listeners, and
+// turning it off clears them again.
+describe("updateConfiguration – enable + disable dirty check by field count (subscribed)", () => {
+    for(const fields of UPDATE_CONFIGURATION_FIELDS) {
+        const form = createHalfChangedForm(fields, false);
+
+        bench(fieldsLabel(fields), () => {
+            form.updateConfiguration({ dirtyCheckEnabled: true });
+            form.updateConfiguration({ dirtyCheckEnabled: false });
+        });
+    }
+});
+
+// One full walk per iteration that compares every registered field with its
+// initial value. No value is empty, so no dirty flag flips and nothing is notified.
+describe("updateConfiguration – toggle dirtyCheckNullAsDefault by field count (subscribed)", () => {
+    for(const fields of UPDATE_CONFIGURATION_FIELDS) {
+        const form = createHalfChangedForm(fields, true);
+        let dirtyCheckNullAsDefault = true;
+
+        bench(fieldsLabel(fields), () => {
+            dirtyCheckNullAsDefault = !dirtyCheckNullAsDefault;
+            form.updateConfiguration({ dirtyCheckNullAsDefault });
+        });
+    }
+});
+
+describe("updateConfiguration – option without dirty recompute, 10000 fields (subscribed)", () => {
+    const form = createHalfChangedForm(10_000, true);
+    let trackTouchOnValueChange = true;
+
+    bench("toggle trackTouchOnValueChange", () => {
+        trackTouchOnValueChange = !trackTouchOnValueChange;
+        form.updateConfiguration({ trackTouchOnValueChange });
+    });
+});
+
 // ── prependItems ───────────────────────────────────────────────────────────
 
 for(const mode of ["bare", "subscribed"] as const) {
