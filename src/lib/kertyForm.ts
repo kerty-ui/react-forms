@@ -749,7 +749,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 isValid: formIsValid,
                 isValidated: false,
             };
-            listenerOptions.formValidationChanged();
+            listenerOptions.formStateChanged();
         }
 
         this.#notifyListeners(listenerOptions);
@@ -784,7 +784,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 isValid: formIsValid,
                 isValidated: false,
             };
-            listenerOptions.formValidationChanged();
+            listenerOptions.formStateChanged();
         }
 
         this.#notifyListeners(listenerOptions);

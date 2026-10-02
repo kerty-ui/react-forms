@@ -97,6 +97,30 @@ describe("KertyForm.addListener", () => {
         expect(count.calls).toBe(0);
     });
 
+    it("should notify a state-only listener when resetValidationResults makes an invalid form valid", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        form.addFieldListener("a", () => {});
+        form.applyFieldValidationResult("a", new ValidationResult().add({ text: "boom", severity: Severity.Error }));
+        const [count, listener] = counter();
+        form.addListener(listener, stateOnly);
+
+        form.resetValidationResults();
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should notify a state-only listener when resetFieldValidationResults makes an invalid form valid", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        form.addFieldListener("a", () => {});
+        form.applyFieldValidationResult("a", new ValidationResult().add({ text: "boom", severity: Severity.Error }));
+        const [count, listener] = counter();
+        form.addListener(listener, stateOnly);
+
+        form.resetFieldValidationResults("a");
+
+        expect(count.calls).toBe(1);
+    });
+
     it("should notify a form-validation listener when a form validation result is applied", () => {
         const form = new KertyForm<any>({ data: { a: 1 } });
         const [count, listener] = counter();
