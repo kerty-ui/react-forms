@@ -478,6 +478,13 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const fieldNames = Array.isArray(name) ? name : [name];
         for(const fieldName of fieldNames) {
             const field = this.#getField(fieldName as string);
+            const path = field.path;
+            const lastPart = path[path.length - 1];
+            if(lastPart.isArrayItem) {
+                const arrayName = field.name.slice(0, path[path.length - 2].nameEndIndex);
+                this.removeItems(arrayName as ArrayFieldPath<TData>, +lastPart.name, silent);
+                continue;
+            }
             const previousData = this.#data;
             this.#data = removeObjectValueImmutable(this.#data, field.path);
             if(!silent) {

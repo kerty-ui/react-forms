@@ -696,6 +696,37 @@ const itemFieldState = (form: KertyForm<PersonsForm>, fieldName: FieldPath<Perso
     return { isTouched, isValid, isValidated, messages: form.getFieldValidationResult(fieldName)?.messages };
 };
 
+describe("KertyForm.removeFieldValue on an array item path", () => {
+    it("should notify the array listener when an item is removed while the array is already dirty", () => {
+        const form = listForm(["a", "b", "c"]);
+        form.setFieldValue("items[0]", "x");
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
+
+        form.removeFieldValue("items[1]");
+
+        expect(count.calls).toBe(1);
+    });
+
+    it("should not mark the shifted item dirty when it equals the initial item at its new index", () => {
+        const form = listForm(["a", "b", "b"]);
+
+        form.removeFieldValue("items[1]");
+
+        expect(form.getFieldState("items[1]").isDirty).toBe(false);
+    });
+
+    it("should move the validation result of a later item down with its value", () => {
+        const form = listForm(["a", "b", "c"]);
+        const result = new ValidationResult().add({ text: "c is invalid", severity: Severity.Error });
+        form.applyFieldValidationResult("items[2]", result);
+
+        form.removeFieldValue("items[1]");
+
+        expect(form.getFieldValidationMessage("items[1]")?.text).toBe("c is invalid");
+    });
+});
+
 describe("KertyForm.removeItems – moving item field states when the first item is removed", () => {
     it.each([
         ["persons[1]", "persons[0]"],
