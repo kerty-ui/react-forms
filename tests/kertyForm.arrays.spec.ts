@@ -187,20 +187,31 @@ describe("KertyForm.insertItems", () => {
         expect(form.getData().items).toEqual(["a", "x", "y", "b", "c"]);
     });
 
-    it("should append the item when the index is past the end", () => {
+    it("should append the item when the index equals the length", () => {
         const form = listForm();
 
-        form.insertItems("items", 99, "x");
+        form.insertItems("items", 3, "x");
 
         expect(form.getData().items).toEqual(["a", "b", "c", "x"]);
     });
 
-    it("should count from the end when the index is negative", () => {
+    it.each([4, 99, -1, -99, 1.5, NaN])("should leave the data unchanged when the index is %s", (index) => {
         const form = listForm();
+        const data = form.getData();
+
+        form.insertItems("items", index, "x");
+
+        expect(form.getData()).toBe(data);
+    });
+
+    it("should not notify listeners when the index is invalid", () => {
+        const form = listForm();
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
 
         form.insertItems("items", -1, "x");
 
-        expect(form.getData().items).toEqual(["a", "b", "x", "c"]);
+        expect(count.calls).toBe(0);
     });
 
     it("should leave the data unchanged when the value is null", () => {
@@ -254,12 +265,48 @@ describe("KertyForm.removeItems", () => {
         expect(indexes).toEqual([0, 2]);
     });
 
-    it("should leave the array unchanged when the index is out of range", () => {
+    it.each([3, 99, -1, -99, 1.5, NaN])("should leave the data unchanged when the index is %s", (index) => {
         const form = listForm();
+        const data = form.getData();
 
-        form.removeItems("items", 99);
+        form.removeItems("items", index);
 
-        expect(form.getData().items).toEqual(["a", "b", "c"]);
+        expect(form.getData()).toBe(data);
+    });
+
+    it("should drop only the valid items when some of several indices are invalid", () => {
+        const form = listForm(["a", "b", "c", "d"]);
+
+        form.removeItems("items", [-1, 1, 99, 1.5, 3]);
+
+        expect(form.getData().items).toEqual(["a", "c"]);
+    });
+
+    it("should drop each item once when an index is listed more than once", () => {
+        const form = listForm(["a", "b", "c", "d"]);
+
+        form.removeItems("items", [1, 3, 1]);
+
+        expect(form.getData().items).toEqual(["a", "c"]);
+    });
+
+    it("should leave the data unchanged when every one of several indices is invalid", () => {
+        const form = listForm();
+        const data = form.getData();
+
+        form.removeItems("items", [-1, 99]);
+
+        expect(form.getData()).toBe(data);
+    });
+
+    it("should not notify listeners when the index is invalid", () => {
+        const form = listForm();
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
+
+        form.removeItems("items", -1);
+
+        expect(count.calls).toBe(0);
     });
 
     it("should notify the array field listener when an item is removed", () => {
@@ -466,20 +513,32 @@ describe("KertyForm.moveItem", () => {
         expect(count.calls).toBe(0);
     });
 
-    it("should move the last item when fromIndex is negative", () => {
+    it.each([
+        [-1, 0],
+        [-9, 2],
+        [3, 0],
+        [1.5, 0],
+        [0, -1],
+        [0, 3],
+        [0, 9],
+        [0, NaN],
+    ])("should leave the data unchanged when moving from %s to %s", (fromIndex, toIndex) => {
         const form = listForm();
+        const data = form.getData();
 
-        form.moveItem("items", -1, 0);
+        form.moveItem("items", fromIndex, toIndex);
 
-        expect(form.getData().items).toEqual(["c", "a", "b"]);
+        expect(form.getData()).toBe(data);
     });
 
-    it("should move the item to the end when toIndex is past the end", () => {
+    it("should not notify listeners when toIndex is invalid", () => {
         const form = listForm();
+        const [count, listener] = counter();
+        form.addFieldListener("items", listener);
 
-        form.moveItem("items", 0, 9);
+        form.moveItem("items", 0, -1);
 
-        expect(form.getData().items).toEqual(["b", "c", "a"]);
+        expect(count.calls).toBe(0);
     });
 
     it("should move the item when the item being moved is null", () => {

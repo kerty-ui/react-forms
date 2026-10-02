@@ -111,6 +111,9 @@ const defaultFieldSnapshot = {
 const isExistingItemIndex = (index: number, length: number) =>
     Number.isInteger(index) && index >= 0 && index < length;
 
+const isInsertItemIndex = (index: number, length: number) =>
+    Number.isInteger(index) && index >= 0 && index <= length;
+
 export const defaultFormConfig = {
     dirtyCheckEnabled: true,
     dirtyCheckNullAsDefault: true,
@@ -974,6 +977,10 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             return;
         }
 
+        if(!isInsertItemIndex(index, currentValue.length)) {
+            return;
+        }
+
         const arrayValue = [...currentValue];
         if(Array.isArray(value)) {
             arrayValue.splice(index, 0, ...value);
@@ -985,14 +992,13 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
 
-        const start = index < 0 ? Math.max(currentValue.length + index, 0) : Math.min(index, currentValue.length);
-        this.#insertItemEntries(field, start, arrayValue.length - currentValue.length, arrayValue.length);
+        this.#insertItemEntries(field, index, arrayValue.length - currentValue.length, arrayValue.length);
 
         if(silent) {
             return;
         }
 
-        this.#onFieldValueChange(field, arrayValue, previousData, { start, end: arrayValue.length });
+        this.#onFieldValueChange(field, arrayValue, previousData, { start: index, end: arrayValue.length });
     }
 
     removeItems(
@@ -1008,8 +1014,15 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
 
         const removedIndexes = Array.isArray(index)
-            ? [...index].sort((a, b) => b - a)
-            : [index < 0 ? Math.max(currentValue.length + index, 0) : index];
+            ? index
+                .filter(i => isExistingItemIndex(i, currentValue.length))
+                .sort((a, b) => b - a)
+                .filter((i, n, sorted) => n === 0 || sorted[n - 1] !== i)
+            : isExistingItemIndex(index, currentValue.length) ? [index] : [];
+
+        if(removedIndexes.length === 0) {
+            return;
+        }
 
         const arrayValue = [...currentValue];
         for(const removedIndex of removedIndexes) {
@@ -1022,7 +1035,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const entries = getObjectValue<ItemNode[]>(this.#fieldEntries as any, field.path);
         if(Array.isArray(entries)) {
             for(const removedIndex of removedIndexes) {
-                if(removedIndex < currentValue.length && removedIndex < entries.length) {
+                if(removedIndex < entries.length) {
                     const removedNode = entries.splice(removedIndex, 1)[0];
                     if(removedNode != null) {
                         this.#resetFieldStates(removedNode);
@@ -1090,35 +1103,34 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             return;
         }
 
-        const arrayValue = [...currentValue];
-        const removedItems = arrayValue.splice(fromIndex, 1);
-
-        if(removedItems.length === 0) {
+        if(!isExistingItemIndex(fromIndex, currentValue.length)
+            || !isExistingItemIndex(toIndex, currentValue.length)) {
             return;
         }
 
-        arrayValue.splice(toIndex, 0, removedItems[0]);
+        if(fromIndex === toIndex) {
+            return;
+        }
+
+        const arrayValue = [...currentValue];
+        arrayValue.splice(toIndex, 0, arrayValue.splice(fromIndex, 1)[0]);
 
         const previousData = this.#data;
         this.#data = setObjectValueImmutable(this.#data, field.path, arrayValue);
 
-        const lastIndex = currentValue.length - 1;
-        const from = fromIndex < 0 ? Math.max(currentValue.length + fromIndex, 0) : fromIndex;
-        const to = toIndex < 0 ? Math.max(lastIndex + toIndex, 0) : Math.min(toIndex, lastIndex);
-
         const entries = getObjectValue<ItemNode[]>(this.#fieldEntries as any, field.path);
-        if(Array.isArray(entries) && from !== to && (from < entries.length || to < entries.length)) {
-            if(entries.length <= Math.max(from, to)) {
-                entries.length = Math.max(from, to) + 1;
+        if(Array.isArray(entries) && (fromIndex < entries.length || toIndex < entries.length)) {
+            if(entries.length <= Math.max(fromIndex, toIndex)) {
+                entries.length = Math.max(fromIndex, toIndex) + 1;
             }
-            entries.splice(to, 0, entries.splice(from, 1)[0]);
+            entries.splice(toIndex, 0, entries.splice(fromIndex, 1)[0]);
         }
 
         if(silent) {
             return;
         }
 
-        this.#onFieldValueChange(field, arrayValue, previousData, { start: Math.min(from, to), end: Math.max(from, to) + 1 });
+        this.#onFieldValueChange(field, arrayValue, previousData, { start: Math.min(fromIndex, toIndex), end: Math.max(fromIndex, toIndex) + 1 });
     }
 
     updateItem<TPath extends ArrayFieldPath<TData>>(
