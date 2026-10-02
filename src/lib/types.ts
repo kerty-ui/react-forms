@@ -257,6 +257,7 @@ export type FormConfig = {
     dirtyCheckNullAsDefault?: boolean;
     trackTouchOnValueChange?: boolean;
     clearFormValidationResultsOnChange?: boolean;
+    keepValidationResultsWithoutListeners?: boolean;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KertyForm, defaultFormConfig, type ObjectData } from "../src/lib";
+import { KertyForm, Severity, ValidationResult, defaultFormConfig, type ObjectData } from "../src/lib";
 
 type LoginForm = {
     username: string;
@@ -62,6 +62,7 @@ describe("KertyForm – configuration", () => {
             dirtyCheckNullAsDefault: true,
             trackTouchOnValueChange: true,
             clearFormValidationResultsOnChange: true,
+            keepValidationResultsWithoutListeners: true,
         });
     });
 
@@ -752,6 +753,62 @@ describe("KertyForm – dirty tracking when a field unsubscribes", () => {
         form.setFieldValue("a", 2);
 
         unsubscribe();
+
+        expect(form.getState().isDirty).toBe(true);
+    });
+});
+
+describe("KertyForm – field state without listeners", () => {
+    const error = (text: string) => new ValidationResult().add({ text, severity: Severity.Error });
+
+    it("should keep the form invalid when the last listener of an invalid field unsubscribes", () => {
+        const form = new KertyForm<any>({ data: { email: "" } });
+        const unsubscribe = register(form, "email");
+        form.applyFieldValidationResult("email", error("Email is required"));
+
+        unsubscribe();
+
+        expect(form.getState().isValid).toBe(false);
+    });
+
+    it("should keep the field validation result when the last listener unsubscribes", () => {
+        const form = new KertyForm<any>({ data: { email: "" } });
+        const unsubscribe = register(form, "email");
+        form.applyFieldValidationResult("email", error("Email is required"));
+
+        unsubscribe();
+
+        expect(form.getFieldValidationMessage("email")?.text).toBe("Email is required");
+    });
+
+    it("should make the form valid when the last listener of an invalid field unsubscribes and results are not kept", () => {
+        const form = new KertyForm<any>({ data: { email: "" }, keepValidationResultsWithoutListeners: false });
+        const unsubscribe = register(form, "email");
+        form.applyFieldValidationResult("email", error("Email is required"));
+
+        unsubscribe();
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it.each([true, false])("should reset the touched state when the last listener unsubscribes (keep results: %s)", keepValidationResultsWithoutListeners => {
+        const form = new KertyForm<any>({ data: { email: "" }, keepValidationResultsWithoutListeners });
+        const unsubscribe = register(form, "email");
+        form.touch("email");
+        unsubscribe();
+
+        register(form, "email");
+
+        expect(form.getFieldState("email").isTouched).toBe(false);
+    });
+
+    it.each([true, false])("should keep the form dirty when the last listener of a dirty field unsubscribes (keep results: %s)", keepValidationResultsWithoutListeners => {
+        const form = new KertyForm<any>({ data: { email: "", name: "" }, keepValidationResultsWithoutListeners });
+        const unsubscribe = register(form, "email");
+        form.setFieldValue("email", "a@b.c");
+        unsubscribe();
+
+        form.setFieldValue("name", "");
 
         expect(form.getState().isDirty).toBe(true);
     });

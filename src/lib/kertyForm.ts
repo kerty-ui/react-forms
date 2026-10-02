@@ -111,6 +111,7 @@ export const defaultFormConfig = {
     dirtyCheckNullAsDefault: true,
     trackTouchOnValueChange: true,
     clearFormValidationResultsOnChange: true,
+    keepValidationResultsWithoutListeners: true,
 } as Required<FormConfig>
 
 class FieldInfo implements IFieldInfo {
@@ -241,6 +242,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #dirtyCheckNullAsDefault: boolean = true;
     #trackTouchOnValueChange: boolean = true;
     #clearFormValidationResultsOnChange: boolean = true;
+    #keepValidationResultsWithoutListeners: boolean = true;
 
     #initialData: TData;
     #data: TData;
@@ -281,6 +283,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
         if(config.clearFormValidationResultsOnChange != null) {
             this.#clearFormValidationResultsOnChange = config.clearFormValidationResultsOnChange;
+        }
+        if(config.keepValidationResultsWithoutListeners != null) {
+            this.#keepValidationResultsWithoutListeners = config.keepValidationResultsWithoutListeners;
         }
     }
 
@@ -343,8 +348,28 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                     return;
                 }
 
-                this.#setFieldState(fieldEntry, defaultFieldState);
-                removeObjectValue(this.#fieldEntries as any, field.path, true);
+                if(this.#keepValidationResultsWithoutListeners) {
+                    if(fieldEntry.state.isTouched) {
+                        this.#setFieldState(fieldEntry, {
+                            ...fieldEntry.state,
+                            isTouched: false,
+                        });
+                    }
+                }
+                else {
+                    fieldEntry.validationResult = undefined;
+                    this.#setFieldState(fieldEntry, {
+                        ...fieldEntry.state,
+                        isTouched: false,
+                        isValid: true,
+                        isValidated: false,
+                    });
+                }
+
+                const state = fieldEntry.state;
+                if(fieldEntry.validationResult == null && !state.isDirty && state.isValid && !state.isValidated) {
+                    removeObjectValue(this.#fieldEntries as any, field.path, true);
+                }
 
                 const listenerOptions = new NotifyListenerOptions();
 

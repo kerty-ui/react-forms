@@ -962,8 +962,8 @@ describe("KertyForm.getFieldValidationResult", () => {
         expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
     });
 
-    it("should stop returning the result once the field unsubscribes", () => {
-        const form = new KertyForm<Partial<LoginForm>>({ data: {} });
+    it("should stop returning the result once the field unsubscribes when field state is not kept without listeners", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, keepValidationResultsWithoutListeners: false });
         const unsubscribe = form.addFieldListener("username", () => { });
         form.applyFieldValidationResult("username", error("Taken"));
 
@@ -1491,8 +1491,8 @@ describe("KertyForm.getInvalidFields", () => {
         expect(form.getInvalidFields()).toEqual([]);
     });
 
-    it("should not return the field once its listener unsubscribes", () => {
-        const form = new KertyForm<Partial<LoginForm>>({ data: {} });
+    it("should not return the field once its listener unsubscribes when field state is not kept without listeners", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, keepValidationResultsWithoutListeners: false });
         const unsubscribe = form.addFieldListener("username", () => { });
         form.applyFieldValidationResult("username", error("Taken"));
 
