@@ -891,6 +891,35 @@ describe("KertyForm – field state without listeners", () => {
 
         expect(form.getState().isDirty).toBe(true);
     });
+
+    it("should report the field dirty when its value was changed silently", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        form.setFieldValue("a", 2, true);
+
+        const state = form.getFieldState("a");
+
+        expect(state.isDirty).toBe(true);
+    });
+
+    it("should return the same state object on repeated reads when the field was changed silently", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        form.setFieldValue("a", 2, true);
+        const before = form.getFieldState("a");
+
+        const after = form.getFieldState("a");
+
+        expect(after).toBe(before);
+    });
+
+    it("should keep the form clean after a later change when a silently changed field was only read", () => {
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
+        form.setFieldValue("a", 2, true);
+        form.getFieldState("a");
+
+        form.setFieldValue("b", 1);
+
+        expect(form.getState().isDirty).toBe(false);
+    });
 });
 
 describe("KertyForm.touch", () => {
@@ -1050,6 +1079,45 @@ describe("KertyForm.reset", () => {
 
         expect(calls).toBe(1);
     });
+
+    it("should read the latest value through a field snapshot created before the reset", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        const snapshot = form.getFieldSnapshot("a");
+        form.reset();
+
+        form.setFieldValue("a", 2);
+
+        expect(snapshot().value).toBe(2);
+    });
+
+    it("should not validate a subscribed field again when another listener subscribes after the reset", () => {
+        let calls = 0;
+        const validator = { mode: "fieldDriven" as const, validate: () => { calls++; return new Map(); } };
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 }, validator });
+        register(form, "a");
+        form.getFieldValue("b");
+        form.reset();
+        form.validate();
+        calls = 0;
+
+        register(form, "a");
+
+        expect(calls).toBe(0);
+    });
+
+    it("should validate a field when it subscribes again after its listener was removed before the reset", () => {
+        let calls = 0;
+        const validator = { mode: "fieldDriven" as const, validate: () => { calls++; return new Map(); } };
+        const form = new KertyForm<any>({ data: { a: 1 }, validator });
+        register(form, "a")();
+        form.reset();
+        form.validate();
+        calls = 0;
+
+        register(form, "a");
+
+        expect(calls).toBe(1);
+    });
 });
 
 describe("KertyForm.getSnapshot", () => {
@@ -1149,5 +1217,17 @@ describe("KertyForm.getFieldSnapshot", () => {
         form.setFieldValue("b", 2);
 
         expect(snapshot()).toBe(before);
+    });
+
+    it("should return the same object when a listener subscribes after a read of a silently changed field", () => {
+        const form = new KertyForm<any>({ data: { a: 1 } });
+        form.setFieldValue("a", 2, true);
+        const snapshot = form.getFieldSnapshot("a");
+        const before = snapshot();
+        register(form, "a");
+
+        const after = snapshot();
+
+        expect(after).toBe(before);
     });
 });

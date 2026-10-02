@@ -94,6 +94,11 @@ const defaultFieldState = {
     isValidated: false,
 } as FieldState;
 
+const dirtyFieldState = {
+    ...defaultFieldState,
+    isDirty: true,
+} as FieldState;
+
 const defaultFieldSnapshot = {
     isTouched: false,
     isDirty: false,
@@ -253,6 +258,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #ruleSet?: string | null;
 
     #fields = new Map<string, FieldInfo>();
+    #listenedFieldCount = 0;
     #fieldEntries = {} as ValidObject<TData>;
     #dirtyCount = 0;
     #invalidCount = 0;
@@ -348,6 +354,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#getFieldEntry(field.path);
 
         field.listenerCount += 1;
+        if(field.listenerCount === 1) {
+            this.#listenedFieldCount += 1;
+        }
 
         const entry = {
             fieldName: name as string,
@@ -382,6 +391,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
             field.listenerCount -= 1;
             if(field.listenerCount === 0) {
+                this.#listenedFieldCount -= 1;
 
                 const fieldEntry = this.#getFieldEntry(field.path, false);
                 if(fieldEntry === undefined) {
@@ -480,20 +490,22 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         return () => {
 
-            const entry = this.#getFieldEntry(field.path);
+            const entry = this.#getFieldEntry(field.path, false);
+            const currentFieldState = entry?.state ?? this.#getEntrylessFieldState(field.path);
+            const currentFieldValidationResult = entry?.validationResult;
 
             const currentFieldValue = getObjectValue<TValue>(this.#data, field.path);
             if(prevFieldValue === currentFieldValue
-                && prevFieldState === entry.state
-                && prevFieldValidationResult === entry.validationResult) {
+                && prevFieldState === currentFieldState
+                && prevFieldValidationResult === currentFieldValidationResult) {
                 return prevFieldSnapshot;
             }
 
             prevFieldValue = currentFieldValue;
-            prevFieldState = entry.state;
-            prevFieldValidationResult = entry.validationResult;
+            prevFieldState = currentFieldState;
+            prevFieldValidationResult = currentFieldValidationResult;
             prevFieldSnapshot = {
-                ...entry.state,
+                ...currentFieldState,
                 value: currentFieldValue,
                 validationResult: prevFieldValidationResult,
             };
@@ -508,7 +520,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     getFieldState<TPath extends FieldPath<TData>>(name: TPath): FieldState {
-        return this.#getFieldEntry(this.#getField(name as string).path).state;
+        const path = this.#getField(name as string).path;
+        return this.#getFieldEntry(path, false)?.state ?? this.#getEntrylessFieldState(path);
     }
 
     setFieldValue<TValue>(name: FieldPathByValue<TData, TValue>, value: TValue | null | undefined, silent?: boolean): void;
@@ -603,6 +616,14 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             entry.state = defaultFieldState;
             entry.validationResult = undefined;
         });
+
+        if(this.#fields.size > this.#listenedFieldCount) {
+            for(const [name, field] of this.#fields) {
+                if(field.listenerCount === 0) {
+                    this.#fields.delete(name);
+                }
+            }
+        }
 
         for (let listener of this.#listeners) {
             listener.notify();
@@ -863,7 +884,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     getFieldValidationResult(name: FieldPath<TData>) {
-        return this.#getFieldEntry(this.#getField(name as string).path).validationResult;
+        return this.#getFieldEntry(this.#getField(name as string).path, false)?.validationResult;
     }
 
     getFieldValidationMessage(name: FieldPath<TData>) {
@@ -1147,13 +1168,17 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         let entry = getObjectValue<FieldEntry>(this.#fieldEntries as any, path, true);
         if(entry === undefined && initialize) {
             entry = this.#addFieldEntry(path);
-            if(this.#dirtyCheckEnabled) {
-                this.#setFieldDirty(entry, this.#isValueDirty(
-                    getObjectValue(this.#data, path),
-                    getObjectValue(this.#initialData, path)));
-            }
+            this.#setFieldState(entry, this.#getEntrylessFieldState(path));
         }
         return entry;
+    }
+
+    // Returns shared state objects, so a snapshot read before the entry exists keeps its identity once it is added.
+    #getEntrylessFieldState(path: FieldPathPart[]) {
+        return this.#dirtyCheckEnabled
+            && this.#isValueDirty(getObjectValue(this.#data, path), getObjectValue(this.#initialData, path))
+            ? dirtyFieldState
+            : defaultFieldState;
     }
 
     #resetEntriesValidation(listenerOptions: NotifyListenerOptions, isValidated: boolean) {
