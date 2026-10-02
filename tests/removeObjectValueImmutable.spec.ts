@@ -52,12 +52,20 @@ describe("removeObjectValueImmutable – flat properties", () => {
         expect(Object.keys(result)).toEqual(["age"]);
     });
 
-    it("should return an equal copy when the property does not exist", () => {
+    it("should return the same reference when the property does not exist", () => {
         const data = { name: "John" };
 
         const result = remove(data, "missing");
 
-        expect(result).toEqual({ name: "John" });
+        expect(result).toBe(data);
+    });
+
+    it("should return the same reference when an intermediate object is missing", () => {
+        const data: any = { name: "John" };
+
+        const result = remove(data, "address.street");
+
+        expect(result).toBe(data);
     });
 
     it("should keep untouched siblings by reference when a property is removed", () => {
@@ -149,6 +157,14 @@ describe("removeObjectValueImmutable – arrays", () => {
         const result = remove(data, "tags[5]");
 
         expect(result.tags).toEqual(["a", "b"]);
+    });
+
+    it("should return the same reference when the index is out of range", () => {
+        const data = { tags: ["a", "b"] };
+
+        const result = remove(data, "tags[5]");
+
+        expect(result).toBe(data);
     });
 
     it("should remove the whole array when the array property itself is removed", () => {

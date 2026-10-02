@@ -13,42 +13,25 @@ export const removeObjectValueImmutable = <TData extends ObjectData | null | und
 
     for (let i = 0; i < lastIndex; i++) {
         const part = path[i];
-        let childObj = parentObj[part.name];
-        if(childObj == null) {
-            childObj = parentObj[part.name] = part.isArray ? [] : {};
+        const childObj = parentObj[part.name];
+        if(childObj === null || typeof childObj !== "object") {
+            return data;
         }
-        else {
-            if(part.isArray) {
-                if(Array.isArray(childObj)) {
-                    childObj = parentObj[part.name] = [...childObj];
-                }
-                else {
-                    childObj = parentObj[part.name] = [];
-                }
-            }
-            else {
-                if(Array.isArray(childObj)) {
-                    childObj = parentObj[part.name] = [...childObj];
-                }
-                else {
-                    childObj = parentObj[part.name] = {...childObj};
-                }
-            }
-        }
-        parentObj = childObj;
+        parentObj = parentObj[part.name] = Array.isArray(childObj) ? [...childObj] : {...childObj};
     }
 
     const lastPart = path[lastIndex];
     if(lastPart.isArrayItem) {
-        if (!Array.isArray(parentObj)) {
-            return;
-        }
         const index = +lastPart.name;
-        if (index >= 0 && index < parentObj.length) {
-            parentObj.splice(index, 1);
+        if (!Array.isArray(parentObj) || index < 0 || index >= parentObj.length) {
+            return data;
         }
+        parentObj.splice(index, 1);
     }
     else {
+        if(!(lastPart.name in parentObj)) {
+            return data;
+        }
         delete parentObj[lastPart.name];
     }
 

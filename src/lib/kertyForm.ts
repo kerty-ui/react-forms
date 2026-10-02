@@ -512,7 +512,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             }
             const previousData = this.#data;
             this.#data = removeObjectValueImmutable(this.#data, field.path);
-            if(!silent) {
+            if(!silent && this.#data !== previousData) {
                 this.#onFieldValueChange(field, undefined, previousData);
             }
         }

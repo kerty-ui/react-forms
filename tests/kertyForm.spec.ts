@@ -346,6 +346,24 @@ describe("KertyForm.removeFieldValue", () => {
 
         expect(calls).toBe(0);
     });
+
+    it("should leave the data unchanged when a parent of the path is missing", () => {
+        const form = new KertyForm<any>({ data: { name: "John" } });
+
+        form.removeFieldValue("address.street");
+
+        expect(form.getData()).toEqual({ name: "John" });
+    });
+
+    it("should not notify listeners when nothing is removed", () => {
+        const form = new KertyForm<any>({ data: { name: "John" } });
+        let calls = 0;
+        form.addListener(() => { calls++; });
+
+        form.removeFieldValue("address.street");
+
+        expect(calls).toBe(0);
+    });
 });
 
 describe("KertyForm – dirty tracking", () => {
