@@ -955,7 +955,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
 
         const removedIndexes = Array.isArray(index)
-            ? index.sort((a, b) => b - a)
+            ? [...index].sort((a, b) => b - a)
             : [index < 0 ? Math.max(currentValue.length + index, 0) : index];
 
         const arrayValue = [...currentValue];

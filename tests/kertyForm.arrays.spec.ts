@@ -245,6 +245,15 @@ describe("KertyForm.removeItems", () => {
         expect(form.getData().items).toEqual(["b", "d"]);
     });
 
+    it("should leave the caller's index array unchanged when several indices are given", () => {
+        const form = listForm(["a", "b", "c", "d"]);
+        const indexes = [0, 2];
+
+        form.removeItems("items", indexes);
+
+        expect(indexes).toEqual([0, 2]);
+    });
+
     it("should leave the array unchanged when the index is out of range", () => {
         const form = listForm();
 
