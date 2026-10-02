@@ -259,16 +259,28 @@ export type FormConfig = {
     clearFormValidationResultsOnChange?: boolean;
 }
 
+/**
+ * Which changes inside a field's children notify its field listener:
+ * - `self`: none;
+ * - `child`: changes to its direct children;
+ * - `descendants`: changes at any depth.
+ *
+ * In every scope the listener is notified when the field itself changes, when an ancestor replaces it,
+ * and when its own state changes (for example, it becomes dirty).
+ */
+export type FieldListenerScope = "self" | "child" | "descendants";
+
 export type FormOptions<TData> = FormConfig & {
     data?: TData;
     validator?: IValidator<TData> | (() => IValidator<TData>);
 }
 
 export type FormListenerOptions = {
+    fieldName?: string;
     listenDataChange: boolean;
     listenStateChange: boolean;
     listenValidationChange: boolean;
-    fieldName?: string;
+    scope?: FieldListenerScope;
 }
 
 export type FormListener = FormListenerOptions & {
@@ -359,8 +371,8 @@ interface IFormArrayActions<TData> {
 
 export interface IKertyForm<TData> extends IFormValidation<TData>, IFormArrayActions<TData> {
     updateConfiguration(config: FormConfig): void;
-    addListener(listener: () => void, options?: Omit<FormListenerOptions, 'fieldName'> ): () => void;
-    addFieldListener<TPath extends FieldPath<TData>>(name: TPath, listener: () => void): () => void;
+    addListener(listener: () => void, options?: Omit<FormListenerOptions, 'fieldName' | 'scope'> ): () => void;
+    addFieldListener<TPath extends FieldPath<TData>>(name: TPath, listener: () => void, scope?: FieldListenerScope): () => void;
     getData(): TData;
     getState(): FormState;
     getSnapshot(): () => FormSnapshot<TData>;

@@ -475,6 +475,77 @@ describe("useDataWatch", () => {
 
         expect(renderCountOf("watcher")).toBe(before);
     });
+
+    describe("nested model", () => {
+        type PersonForm = {
+            person: {
+                name: string;
+                surname: string;
+                vehicles: { brand: string; model: string }[];
+                contacts: { address: string[] };
+            };
+        };
+
+        const selectors: Record<string, (data: PersonForm) => unknown> = {
+            "person": d => d.person,
+            "person.name": d => d.person.name,
+            "person.surname": d => d.person.surname,
+            "person.vehicles": d => d.person.vehicles,
+            "person.vehicles[0]": d => d.person.vehicles[0],
+            "person.vehicles[0].brand": d => d.person.vehicles[0].brand,
+            "person.vehicles[0].model": d => d.person.vehicles[0].model,
+            "person.contacts": d => d.person.contacts,
+            "person.contacts.address": d => d.person.contacts.address,
+            "person.contacts.address[0]": d => d.person.contacts.address[0],
+        };
+
+        const Watcher = ({ f, node }: { f: IKertyForm<PersonForm>; node: string }) => {
+            useDataWatch(f, selectors[node]);
+            return <RenderCount testId={node} />;
+        };
+
+        const renderWatchers = () => {
+            const form = new KertyForm<PersonForm>({
+                data: {
+                    person: {
+                        name: "John",
+                        surname: "Smith",
+                        vehicles: [{ brand: "Volvo", model: "XC60" }],
+                        contacts: { address: ["Riga"] },
+                    },
+                },
+            });
+            render(<>{Object.keys(selectors).map(node => <Watcher key={node} f={form} node={node} />)}</>);
+            return form;
+        };
+
+        it.each<[string, string, number]>([
+            ["person.name", "person", 1],
+            ["person.name", "person.name", 1],
+            ["person.name", "person.surname", 0],
+            ["person.name", "person.vehicles", 0],
+            ["person.name", "person.contacts", 0],
+            ["person.vehicles[0].brand", "person", 1],
+            ["person.vehicles[0].brand", "person.vehicles", 1],
+            ["person.vehicles[0].brand", "person.vehicles[0]", 1],
+            ["person.vehicles[0].brand", "person.vehicles[0].brand", 1],
+            ["person.vehicles[0].brand", "person.vehicles[0].model", 0],
+            ["person.vehicles[0].brand", "person.name", 0],
+            ["person.vehicles[0].brand", "person.contacts", 0],
+            ["person.contacts.address[0]", "person", 1],
+            ["person.contacts.address[0]", "person.contacts", 1],
+            ["person.contacts.address[0]", "person.contacts.address", 1],
+            ["person.contacts.address[0]", "person.contacts.address[0]", 1],
+            ["person.contacts.address[0]", "person.vehicles", 0],
+        ])("should re-render when %s changes: watcher of %s → %i time(s)", (changedField, node, expectedRenders) => {
+            const form = renderWatchers();
+            const before = renderCountOf(node);
+
+            act(() => form.setFieldValue(changedField as any, "changed"));
+
+            expect(renderCountOf(node) - before).toBe(expectedRenders);
+        });
+    });
 });
 
 describe("useStateWatch", () => {

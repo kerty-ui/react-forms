@@ -33,7 +33,8 @@
     "test:coverage": "vitest run --coverage",
     "test:types": "tsc -p ./tsconfig.test.json",
     "bench": "vitest bench --run --config vitest.bench.config.ts",
-    "bench:watch": "vitest bench --config vitest.bench.config.ts"
+    "bench:watch": "vitest bench --config vitest.bench.config.ts",
+    "bench:react": "vitest bench --run --config vitest.bench.react.config.ts"
   },
   "peerDependencies": {
     "react": "^19.0.0",

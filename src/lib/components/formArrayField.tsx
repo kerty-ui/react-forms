@@ -1,12 +1,13 @@
 ﻿import type { ReactNode } from "react";
 import { useField } from "../hooks/useField";
-import type { ArrayFieldPath, ArrayItemType, FieldPath, FieldPathValue, FieldSnapshot, IKertyForm } from "./../types";
+import type { ArrayFieldPath, ArrayItemType, FieldListenerScope, FieldPath, FieldPathValue, FieldSnapshot, IKertyForm } from "./../types";
 
 type FormArrayFieldName<TData> = ArrayFieldPath<TData> & FieldPath<TData>;
 
 type FormArrayFieldProps<TData, TName extends FormArrayFieldName<TData>> = {
     form: IKertyForm<TData>;
     name: TName;
+    scope?: FieldListenerScope;
     children: (ctx: FormArrayFieldContext<TData, TName>) => ReactNode;
 };
 
@@ -54,6 +55,7 @@ export const FormArrayField = <TData, TName extends FormArrayFieldName<TData>>(
     const field = useField<FieldPathValue<TData, TName>>(
         props.form,
         props.name,
+        props.scope,
     );
     return props.children({
         field,

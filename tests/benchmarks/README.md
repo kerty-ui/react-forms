@@ -8,6 +8,7 @@ value reads, value writes and dirty-check comparisons.
 ```bash
 npm run bench          # single run, all benchmarks (~4 min)
 npm run bench:watch    # watch mode
+npm run bench:react    # React render benchmarks (*.bench.tsx, jsdom)
 ```
 
 Both use `vitest.bench.config.ts`, which runs in the `node` environment without
@@ -104,3 +105,4 @@ ratio should not be trusted without a rerun on an idle machine.
 | `removeObjectValue.performance.bench.ts` | Immutable removal vs `set(undefined)`, array splice position, data-size scaling |
 | `isEqual.performance.bench.ts` | Primitives, arrays, objects, dates, circular refs, `treatNullAsDefault` |
 | `kertyForm.performance.bench.ts` | `KertyForm.setFieldValue` / `prependItems` / `insertItems` / `validate` / `applyValidationResults` / `getInvalidFields` / `reset` by form size, with and without field listeners |
+| `arrayRender.performance.bench.tsx` | Re-render cost of one name edit in a 1000-row list: `useField(persons)` with plain vs memo rows, `useDataWatch(length)` baseline (`npm run bench:react`) |

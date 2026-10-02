@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KertyForm, ValidationResult, Severity, type FormListenerOptions } from "../src/lib";
+import { KertyForm, ValidationResult, Severity, type FieldListenerScope, type FormListenerOptions } from "../src/lib";
 
 const dataOnly: FormListenerOptions = {
     listenDataChange: true,
@@ -437,6 +437,66 @@ describe("KertyForm – hierarchical field notification", () => {
         form.addListener(listener, dataOnly);
 
         form.setFieldValue("items[0].name", "b");
+
+        expect(count.calls).toBe(1);
+    });
+});
+
+describe("KertyForm.addFieldListener – scope", () => {
+    const STREET = "company.persons[0].address.street";
+
+    const createDirtyForm = () => {
+        const form = new KertyForm<any>({
+            data: { company: { persons: [{ address: { street: "a" } }] }, tags: ["a"] },
+        });
+        form.setFieldValue(STREET, "b");
+        form.setFieldValue("tags[0]", "b");
+        return form;
+    };
+
+    it.each<[FieldListenerScope | undefined, string, string, number]>([
+        [undefined, STREET, STREET, 1],
+        [undefined, STREET, "company.persons[0].address", 0],
+        ["self", STREET, "company.persons[0].address", 0],
+        ["self", "tags[0]", "tags", 0],
+        ["child", STREET, "company.persons[0].address", 1],
+        ["child", STREET, "company.persons[0]", 0],
+        ["child", "tags[0]", "tags", 1],
+        ["child", "company.persons[0]", "company.persons", 1],
+        ["descendants", STREET, "company.persons[0].address", 1],
+        ["descendants", STREET, "company.persons[0]", 1],
+        ["descendants", STREET, "company.persons", 1],
+        ["descendants", STREET, "company", 1],
+        ["descendants", "tags[0]", "tags", 1],
+        ["descendants", "tags[0]", "tag", 0],
+    ])("should notify a listener %#: scope %s, %s changes, listener on %s → %i call(s) when the ancestors are already dirty",
+        (scope, changedField, listenerField, expectedCalls) => {
+            const form = createDirtyForm();
+            const [count, listener] = counter();
+            form.addFieldListener(listenerField, listener, scope);
+
+            form.setFieldValue(changedField, "c");
+
+            expect(count.calls).toBe(expectedCalls);
+        });
+
+    it.each<FieldListenerScope>(["self", "child", "descendants"])(
+        "should notify a descendant listener when its ancestor is replaced in %s scope", scope => {
+            const form = createDirtyForm();
+            const [count, listener] = counter();
+            form.addFieldListener(STREET, listener, scope);
+
+            form.setFieldValue("company.persons", [{ address: { street: "c" } }]);
+
+            expect(count.calls).toBe(1);
+        });
+
+    it("should notify an ancestor listener in self scope when the change makes the ancestor dirty", () => {
+        const form = new KertyForm<any>({ data: { company: { name: "a" } } });
+        const [count, listener] = counter();
+        form.addFieldListener("company", listener, "self");
+
+        form.setFieldValue("company.name", "b");
 
         expect(count.calls).toBe(1);
     });

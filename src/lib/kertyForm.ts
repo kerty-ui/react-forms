@@ -15,6 +15,7 @@ import {
     type FieldSnapshot,
     type ArrayFieldPath,
     type ArrayItemType,
+    type FieldListenerScope,
     type FormConfig,
     type FormOptions,
     type FormListener,
@@ -164,10 +165,11 @@ class NotifyListenerOptions {
         this.#affectedFields.add(fieldName);
     }
 
-    addChangedField(fieldName: string) {
+    addChangedField(field: FieldInfo) {
+        const path = field.path;
         this.#changedFields.push({
-            name: fieldName,
-            parentNameLength: Math.max(fieldName.lastIndexOf("."), fieldName.lastIndexOf("["))
+            name: field.name,
+            parentNameLength: path.length > 1 ? path[path.length - 2].nameEndIndex! : -1
         });
     }
 
@@ -180,7 +182,7 @@ class NotifyListenerOptions {
             || this.#changedFields.length > 0;
     }
 
-    isNotificationNeeded(listener: FormListenerOptions) {
+    isNotificationNeeded(listener: FormListener) {
         if((listener.listenDataChange && this.#formDataChanged)
             || (listener.listenStateChange && this.#formStateChanged)
             || (listener.listenValidationChange && this.#formValidationChanged)) {
@@ -198,23 +200,33 @@ class NotifyListenerOptions {
         const listenerFieldNameLength = listener.fieldName.length;
 
         for(const changedField of this.#changedFields) {
-            const changedFieldNameLength = changedField.name.length;
+            const changedFieldName = changedField.name;
+            const changedFieldNameLength = changedFieldName.length;
             if(listenerFieldNameLength === changedFieldNameLength) {
-                if(listener.fieldName === changedField.name) {
+                if(listener.fieldName === changedFieldName) {
                     return true;
                 }
             }
-            else if(listenerFieldNameLength === changedField.parentNameLength) {
-                if(changedField.name.startsWith(listener.fieldName)) {
-                    return true;
+            else if(listenerFieldNameLength < changedFieldNameLength) {
+                if(listener.scope === "descendants") {
+                    if(changedFieldName.startsWith(listener.fieldName)) {
+                        const next = changedFieldName[listenerFieldNameLength];
+                        if(next === "." || next === "[") {
+                            return true;
+                        }
+                    }
                 }
-            }
-            else if(listenerFieldNameLength > changedFieldNameLength) {
-                if(listener.fieldName.startsWith(changedField.name)) {
-                    const next = listener.fieldName[changedFieldNameLength];
-                    if(next === "." || next === "[") {
+                else if(listener.scope === "child") {
+                    if(listenerFieldNameLength === changedField.parentNameLength
+                        && changedFieldName.startsWith(listener.fieldName)) {
                         return true;
                     }
+                }
+            }
+            else if(listener.fieldName.startsWith(changedFieldName)) {
+                const next = listener.fieldName[changedFieldNameLength];
+                if(next === "." || next === "[") {
+                    return true;
                 }
             }
         }
@@ -285,7 +297,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    addFieldListener(name: FieldPath<TData>, listener: () => void) {
+    addFieldListener(name: FieldPath<TData>, listener: () => void, scope?: FieldListenerScope) {
 
         const field = this.#getField(name as string);
         this.#getFieldEntry(field.path);
@@ -297,6 +309,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             listenDataChange: false,
             listenStateChange: false,
             listenValidationChange: false,
+            scope,
             notify: listener,
         } as FormListener;
         this.#listeners.add(entry);
@@ -1276,7 +1289,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const listenerOptions = new NotifyListenerOptions();
 
         listenerOptions.formDataChanged();
-        listenerOptions.addChangedField(field.name);
+        listenerOptions.addChangedField(field);
 
         if(this.#clearFormValidationResultsOnChange && this.#validationResult != null) {
             this.#validationResult = undefined;
