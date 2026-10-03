@@ -1,32 +1,19 @@
 ﻿import type { ReactNode } from "react";
-import { useField } from "../hooks/useField";
-import type { FieldListenerScope, FieldPath, FieldPathValue, FieldSnapshot, IKertyForm } from "./../types";
+import { useField, type UseField, type UseFieldProps } from "../hooks/useField";
+import type { FieldPathValue, IKertyForm } from "./../types";
 
-type FormFieldProps<TData, TName extends FieldPath<TData>> = {
+type FormFieldProps<TData, TPath extends string> = UseFieldProps<TData, TPath> & {
+    children: (ctx: FormFieldContext<TData, TPath>) => ReactNode;
+};
+
+export type FormFieldContext<TData, TPath extends string> = {
+    field: UseField<TData, TPath, FieldPathValue<TData, TPath>>;
     form: IKertyForm<TData>;
-    name: TName;
-    scope?: FieldListenerScope;
-    children: (ctx: FormFieldContext<TData, TName>) => ReactNode;
 };
 
-export type FormFieldContext<TData, TName extends FieldPath<TData>> = {
-    field: FieldSnapshot<FieldPathValue<TData, TName>>;
-    setFieldValue: (value: FieldPathValue<TData, TName>) => void;
-    touchField: () => void;
-};
-
-export const FormField = <TData, TName extends FieldPath<TData>>(
-    props: FormFieldProps<TData, TName>,
+export const FormField = <TData, TPath extends string>(
+    props: FormFieldProps<TData, TPath>,
 ) => {
-    const field = useField<FieldPathValue<TData, TName>>(
-        props.form,
-        props.name,
-        props.scope,
-    );
-
-    return props.children({
-        field,
-        setFieldValue: (value) => props.form.setFieldValue(props.name, value),
-        touchField: () => props.form.touch(props.name),
-    });
+    const [field, form] = useField(props);
+    return props.children({ field: field, form: form });
 };

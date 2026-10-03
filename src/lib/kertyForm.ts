@@ -8,12 +8,12 @@ import { isEqual } from "./utils/isEqual";
 import { ValidationResult } from "./validation/validationResult";
 import {
     Severity,
-    type FieldPath,
+    type AutoFieldPath,
+    type AutoArrayFieldPath,
     type FieldPathValue,
     type FieldPathByValue,
     type FieldState,
     type FieldSnapshot,
-    type ArrayFieldPath,
     type ArrayItemType,
     type FieldListenerScope,
     type FormConfig,
@@ -22,6 +22,7 @@ import {
     type FormListenerOptions,
     type FormState,
     type FormSnapshot,
+    type FormValidateResult,
     type IKertyForm,
     type IValidator,
     type IValidationResult,
@@ -120,6 +121,7 @@ export const defaultFormConfig = {
     trackTouchOnValueChange: true,
     clearFormValidationResultsOnChange: true,
     keepValidationResultsWithoutListeners: true,
+    cacheValidationResult: true,
 } as Required<FormConfig>
 
 class FieldInfo implements IFieldInfo {
@@ -251,6 +253,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #trackTouchOnValueChange: boolean = true;
     #clearFormValidationResultsOnChange: boolean = true;
     #keepValidationResultsWithoutListeners: boolean = true;
+    #cacheValidationResult: boolean = true;
 
     #initialData: TData;
     #data: TData;
@@ -259,6 +262,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #isMessageDrivenValidator: boolean = false;
     #validationResult?: IValidationResult;
     #ruleSet?: string | null;
+    #lastValidation?: { ruleSet: string | null | undefined, result: FormValidateResult };
 
     #fields = new Map<string, FieldInfo>();
     #listenedFieldCount = 0;
@@ -298,6 +302,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
         if(config.keepValidationResultsWithoutListeners != null) {
             this.#keepValidationResultsWithoutListeners = config.keepValidationResultsWithoutListeners;
+        }
+        if(config.cacheValidationResult != null) {
+            this.#cacheValidationResult = config.cacheValidationResult;
         }
 
         if(this.#dirtyCheckEnabled === dirtyCheckEnabled && this.#dirtyCheckNullAsDefault === dirtyCheckNullAsDefault) {
@@ -351,7 +358,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    addFieldListener(name: FieldPath<TData>, listener: () => void, scope?: FieldListenerScope) {
+    addFieldListener<TPath extends string>(name: AutoFieldPath<TData, TPath>, listener: () => void, scope?: FieldListenerScope) {
 
         const field = this.#getField(name as string);
         this.#getFieldEntry(field.path);
@@ -481,7 +488,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         return () => getValue(this.#state);
     }
 
-    getFieldSnapshot<TPath extends FieldPath<TData>>(name: TPath) {
+    getFieldSnapshot<TPath extends string>(name: AutoFieldPath<TData, TPath>) {
         type TValue = FieldPathValue<TData, TPath>;
 
         let prevFieldValue: TValue | undefined = undefined;
@@ -517,18 +524,18 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         };
     }
 
-    getFieldValue<TPath extends FieldPath<TData>>(name: TPath): FieldPathValue<TData, TPath> | undefined {
+    getFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath>): FieldPathValue<TData, TPath> | undefined {
         const field = this.#getField(name as string);
         return getObjectValue(this.#data, field.path);
     }
 
-    getFieldState<TPath extends FieldPath<TData>>(name: TPath): FieldState {
+    getFieldState<TPath extends string>(name: AutoFieldPath<TData, TPath>): FieldState {
         const path = this.#getField(name as string).path;
         return this.#getFieldEntry(path, false)?.state ?? this.#getEntrylessFieldState(path);
     }
 
+    setFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath>, value: FieldPathValue<TData, TPath> | null | undefined, silent?: boolean): void;
     setFieldValue<TValue>(name: FieldPathByValue<TData, TValue>, value: TValue | null | undefined, silent?: boolean): void;
-    setFieldValue<TPath extends FieldPath<TData>>(name: TPath, value: FieldPathValue<TData, TPath> | null | undefined, silent?: boolean): void;
     setFieldValue(name: string, value: unknown, silent: boolean = false) {
         const field = this.#getField(name as string);
         const previousData = this.#data;
@@ -536,7 +543,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#onFieldValueChange(field, value, previousData, undefined, silent);
     }
 
-    clearFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent: boolean = false) {
+    clearFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath> | AutoFieldPath<TData, TPath>[], silent: boolean = false) {
         const fieldNames = Array.isArray(name) ? name : [name];
         for(const fieldName of fieldNames) {
             const field = this.#getField(fieldName as string);
@@ -546,7 +553,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    removeFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent: boolean = false) {
+    removeFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath> | AutoFieldPath<TData, TPath>[], silent: boolean = false) {
         const fieldNames = Array.isArray(name) ? name : [name];
         for(const fieldName of fieldNames) {
             const field = this.#getField(fieldName as string);
@@ -554,7 +561,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             const lastPart = path[path.length - 1];
             if(lastPart.isArrayItem) {
                 const arrayName = field.name.slice(0, path[path.length - 2].nameEndIndex);
-                this.removeItems(arrayName as ArrayFieldPath<TData>, +lastPart.name, silent);
+                this.removeItems(arrayName as AutoArrayFieldPath<TData, string>, +lastPart.name, silent);
                 continue;
             }
             const previousData = this.#data;
@@ -565,7 +572,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    touch(name?: FieldPath<TData>) {
+    touch<TPath extends string>(name?: AutoFieldPath<TData, TPath>): void;
+    touch<TValue>(name?: FieldPathByValue<TData, TValue>): void;
+    touch(name?: string) {
 
         const listenerOptions = new NotifyListenerOptions();
 
@@ -598,6 +607,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#validatedCount = 0;
         this.#validationResult = undefined;
         this.#ruleSet = undefined;
+        this.#lastValidation = undefined;
 
         if(data != null) {
             this.#initialData = structuredClone(data);
@@ -627,9 +637,14 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     setValidator(validator: IValidator<TData> | undefined) {
         this.#validator = validator;
         this.#isMessageDrivenValidator = validator?.mode === "messageDriven";
+        this.#lastValidation = undefined;
     }
 
-    validate(ruleSet?: string | null) {
+    validate(ruleSet?: string | null): FormValidateResult {
+
+        if(this.#cacheValidationResult && this.#lastValidation != null && this.#lastValidation.ruleSet === ruleSet) {
+            return this.#lastValidation.result;
+        }
 
         this.#ruleSet = ruleSet;
 
@@ -698,17 +713,20 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         this.#notifyListeners(listenerOptions);
 
-        return {
+        const result = {
             isValid: formIsValid,
             invalidFields,
         };
+        this.#lastValidation = { ruleSet, result };
+
+        return result;
     }
 
     applyValidationResult(result: IValidationResult, options?: ApplyValidationOptions): void {
         this.applyValidationResults(new Map<string, IValidationResult>([["", result]]), options);
     }
 
-    applyFieldValidationResult(name: FieldPath<TData>, result: IValidationResult, options?: ApplyValidationOptions) {
+    applyFieldValidationResult<TPath extends string>(name: AutoFieldPath<TData, TPath>, result: IValidationResult, options?: ApplyValidationOptions) {
         this.applyValidationResults(new Map<string, IValidationResult>([[name, result]]), options);
     }
 
@@ -717,6 +735,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         if(validationResults == null) {
             return;
         }
+
+        this.#lastValidation = undefined;
 
         const listenerOptions = new NotifyListenerOptions();
 
@@ -813,6 +833,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
     resetValidationResults() {
 
+        this.#lastValidation = undefined;
+
         const listenerOptions = new NotifyListenerOptions();
 
         if(this.#validationResult != null) {
@@ -835,7 +857,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#notifyListeners(listenerOptions);
     }
 
-    resetFieldValidationResults<TPath extends FieldPath<TData>>(name: TPath | TPath[]) {
+    resetFieldValidationResults<TPath extends string>(name: AutoFieldPath<TData, TPath> | AutoFieldPath<TData, TPath>[]) {
+
+        this.#lastValidation = undefined;
 
         const listenerOptions = new NotifyListenerOptions();
 
@@ -869,20 +893,15 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#notifyListeners(listenerOptions);
     }
 
-    getValidationResult() {
-        return this.#validationResult;
-    }
-
-    getValidationMessage() {
-        return this.#validationResult?.messages[0];
-    }
-
-    getFieldValidationResult(name: FieldPath<TData>) {
+    getValidationResult<TPath extends string>(name?: AutoFieldPath<TData, TPath> | null) {
+        if(name == null) {
+            return this.#validationResult;
+        }
         return this.#getFieldEntry(this.#getField(name as string).path, false)?.validationResult;
     }
 
-    getFieldValidationMessage(name: FieldPath<TData>) {
-        return this.getFieldValidationResult(name)?.messages[0];
+    getValidationMessage<TPath extends string>(name?: AutoFieldPath<TData, TPath> | null) {
+        return this.getValidationResult(name)?.messages[0];
     }
 
     getInvalidFields() {
@@ -893,8 +912,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         return names;
     }
 
-    prependItems<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    prependItems<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         value: ArrayItemType<TData, TPath> | ArrayItemType<TData, TPath>[],
         silent: boolean = false): void {
 
@@ -918,8 +937,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#onFieldValueChange(field, arrayValue, previousData, { start: 0, end: arrayValue.length }, silent);
     }
 
-    appendItems<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    appendItems<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         value: ArrayItemType<TData, TPath> | ArrayItemType<TData, TPath>[],
         silent: boolean = false): void {
 
@@ -941,8 +960,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#onFieldValueChange(field, arrayValue, previousData, undefined, silent);
     }
 
-    insertItems<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    insertItems<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         index: number,
         value: ArrayItemType<TData, TPath> | ArrayItemType<TData, TPath>[],
         silent: boolean = false): void {
@@ -977,8 +996,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#onFieldValueChange(field, arrayValue, previousData, { start: index, end: arrayValue.length }, silent);
     }
 
-    removeItems(
-        name: ArrayFieldPath<TData>,
+    removeItems<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         index: number | number[],
         silent: boolean = false): void {
 
@@ -1030,8 +1049,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         );
     }
 
-    swapItem<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    swapItem<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         fromIndex: number,
         toIndex: number,
         silent: boolean = false): void {
@@ -1070,8 +1089,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         );
     }
 
-    moveItem(
-        name: ArrayFieldPath<TData>,
+    moveItem<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         fromIndex: number,
         toIndex: number,
         silent: boolean = false): void {
@@ -1114,8 +1133,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         );
     }
 
-    updateItem<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    updateItem<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         index: number,
         value: ArrayItemType<TData, TPath>,
         silent: boolean = false): void {
@@ -1329,7 +1348,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             return;
         }
 
-        const validationResults = this.#validator?.validate({
+        const validationResults = this.#validator.validate({
             fieldName: name,
             data: this.#data,
             ruleSet: this.#ruleSet,
@@ -1360,12 +1379,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    #onFieldValueChange(
-        field: FieldInfo,
-        value: unknown,
-        previousData: TData,
-        movedItems: MovedItems | undefined,
-        silent: boolean) {
+    #onFieldValueChange(field: FieldInfo, value: unknown, previousData: TData, movedItems: MovedItems | undefined, silent: boolean) {
+
+        this.#lastValidation = undefined;
 
         const listenerOptions = new NotifyListenerOptions();
 

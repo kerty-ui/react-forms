@@ -72,7 +72,7 @@ describe("KertyForm.validate", () => {
 
         form.validate();
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
     });
 
     it("should mark the failing field as invalid when validation runs", () => {
@@ -105,7 +105,7 @@ describe("KertyForm.validate", () => {
         form.setFieldValue("password", "pw");
         form.validate();
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should apply only the active rule set when a rule set is passed", () => {
@@ -158,6 +158,131 @@ describe("KertyForm.validate", () => {
     });
 });
 
+// ─── validate result caching ─────────────────────────────────────────────────
+
+/** A fieldDriven validator that counts its full-form runs. */
+const countingValidator = () => {
+    const validator = {
+        mode: "fieldDriven" as const,
+        fullRuns: 0,
+        validate: ({ fieldName }: { fieldName?: string | null }) => {
+            if (fieldName == null) validator.fullRuns++;
+            return new Map<string, ValidationResult>();
+        },
+    };
+    return validator;
+};
+
+const validatedCountingForm = (cacheValidationResult?: boolean) => {
+    const validator = countingValidator();
+    const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator, cacheValidationResult });
+    form.addFieldListener("username", () => { });
+    form.validate();
+    return { form, validator };
+};
+
+const cacheInvalidatingOperations = [
+    { operation: "setFieldValue()", invalidate: (form: KertyForm<Partial<LoginForm>>) => form.setFieldValue("username", "bob") },
+    { operation: "silent setFieldValue()", invalidate: (form: KertyForm<Partial<LoginForm>>) => form.setFieldValue("username", "bob", true) },
+    { operation: "reset()", invalidate: (form: KertyForm<Partial<LoginForm>>) => form.reset() },
+    { operation: "applyValidationResult()", invalidate: (form: KertyForm<Partial<LoginForm>>) => form.applyValidationResult(error("Login failed")) },
+    { operation: "resetValidationResults()", invalidate: (form: KertyForm<Partial<LoginForm>>) => form.resetValidationResults() },
+    { operation: "resetFieldValidationResults()", invalidate: (form: KertyForm<Partial<LoginForm>>) => form.resetFieldValidationResults("username") },
+];
+
+describe("KertyForm.validate – result caching", () => {
+    it("should return the previous result when validation runs again without changes", () => {
+        const { form } = validatedCountingForm();
+        const first = form.validate("submit");
+
+        const second = form.validate("submit");
+
+        expect(second).toBe(first);
+    });
+
+    it("should not run the validator when validation runs again without changes", () => {
+        const { form, validator } = validatedCountingForm();
+
+        form.validate();
+
+        expect(validator.fullRuns).toBe(1);
+    });
+
+    it("should not notify listeners when validation runs again without changes", () => {
+        const { form } = validatedCountingForm();
+        let notifications = 0;
+        form.addListener(() => notifications++);
+
+        form.validate();
+
+        expect(notifications).toBe(0);
+    });
+
+    it("should run the validator when a different rule set is passed", () => {
+        const { form, validator } = validatedCountingForm();
+
+        form.validate("submit");
+
+        expect(validator.fullRuns).toBe(2);
+    });
+
+    it.each(cacheInvalidatingOperations)("should run the validator when $operation was called after the last validation", ({ invalidate }) => {
+        const { form, validator } = validatedCountingForm();
+        invalidate(form);
+
+        form.validate();
+
+        expect(validator.fullRuns).toBe(2);
+    });
+
+    it("should run the new validator when a validator was set after the last validation", () => {
+        const { form } = validatedCountingForm();
+        const newValidator = countingValidator();
+        form.setValidator(newValidator);
+
+        form.validate();
+
+        expect(newValidator.fullRuns).toBe(1);
+    });
+
+    it("should run the validator when caching is disabled", () => {
+        const { form, validator } = validatedCountingForm(false);
+
+        form.validate();
+
+        expect(validator.fullRuns).toBe(2);
+    });
+
+    it("should run the validator when caching was disabled after the last validation", () => {
+        const { form, validator } = validatedCountingForm();
+        form.updateConfiguration({ cacheValidationResult: false });
+
+        form.validate();
+
+        expect(validator.fullRuns).toBe(2);
+    });
+
+    it("should run the validator when caching was re-enabled after a change", () => {
+        const { form, validator } = validatedCountingForm(false);
+        form.setFieldValue("username", "bob");
+        form.updateConfiguration({ cacheValidationResult: true });
+
+        form.validate();
+
+        expect(validator.fullRuns).toBe(2);
+    });
+
+    it("should replace an applied field result when validation runs again", () => {
+        const form = mountedForm(requiredLoginValidator(), { username: "bob", password: "pw" });
+        form.validate();
+        form.applyFieldValidationResult("username", error("Username is taken"));
+
+        form.validate();
+
+        expect(form.getValidationMessage("username")).toBeUndefined();
+    });
+});
+
 // ─── on-change revalidation, fieldDriven ─────────────────────────────────────
 
 describe("KertyForm – fieldDriven revalidation on change", () => {
@@ -166,7 +291,7 @@ describe("KertyForm – fieldDriven revalidation on change", () => {
 
         form.setFieldValue("username", "");
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should clear the field message when the field becomes valid after having been validated", () => {
@@ -175,7 +300,7 @@ describe("KertyForm – fieldDriven revalidation on change", () => {
 
         form.setFieldValue("username", "bob");
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should restore the field message when the field becomes invalid again", () => {
@@ -185,7 +310,7 @@ describe("KertyForm – fieldDriven revalidation on change", () => {
 
         form.setFieldValue("username", "");
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
     });
 
     it("should leave other invalid fields untouched when one field is corrected", () => {
@@ -194,7 +319,7 @@ describe("KertyForm – fieldDriven revalidation on change", () => {
 
         form.setFieldValue("username", "bob");
 
-        expect(form.getFieldValidationMessage("password")?.text).toBe("Password is required");
+        expect(form.getValidationMessage("password")?.text).toBe("Password is required");
     });
 
     it("should keep the form invalid when only one of two failing fields is corrected", () => {
@@ -249,7 +374,7 @@ describe("KertyForm – fieldDriven revalidation after a passing validate", () =
 
         form.setFieldValue("username", "");
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
     });
 
     it("should make the form invalid when a passing field is cleared after full validation", () => {
@@ -266,7 +391,7 @@ describe("KertyForm – fieldDriven revalidation after a passing validate", () =
 
         form.setFieldValue("username", "");
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should validate a field that was registered after the form was validated", () => {
@@ -280,7 +405,7 @@ describe("KertyForm – fieldDriven revalidation after a passing validate", () =
         form.addFieldListener("password", () => { });
         form.setFieldValue("password", "");
 
-        expect(form.getFieldValidationMessage("password")?.text).toBe("Password is required");
+        expect(form.getValidationMessage("password")?.text).toBe("Password is required");
     });
 });
 
@@ -310,7 +435,7 @@ describe("KertyForm – dependent fields on change", () => {
 
         form.setFieldValue("password", "xyz");
 
-        expect(form.getFieldValidationMessage("confirmPassword")?.text).toBe("Passwords must match");
+        expect(form.getValidationMessage("confirmPassword")?.text).toBe("Passwords must match");
     });
 
     it("should make the form invalid when the dependent field starts failing", () => {
@@ -329,7 +454,7 @@ describe("KertyForm – dependent fields on change", () => {
 
         form.setFieldValue("password", "abc");
 
-        expect(form.getFieldValidationMessage("confirmPassword")).toBeUndefined();
+        expect(form.getValidationMessage("confirmPassword")).toBeUndefined();
     });
 
     it("should make the form valid again when the dependent field stops failing", () => {
@@ -383,7 +508,7 @@ describe("KertyForm – fieldDriven revalidation of array item fields", () => {
 
         form.setFieldValue("items[0].name", "");
 
-        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+        expect(form.getValidationMessage("items[0].name")?.text).toBe("Name is required");
     });
 
     it("should clear the item message when the edited item field is filled in", () => {
@@ -392,7 +517,7 @@ describe("KertyForm – fieldDriven revalidation of array item fields", () => {
 
         form.setFieldValue("items[0].name", "John");
 
-        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[0].name")).toBeUndefined();
     });
 
     it("should make the form valid when the last failing item field is filled in", () => {
@@ -420,7 +545,7 @@ describe("KertyForm – fieldDriven revalidation of array item fields", () => {
 
         form.setFieldValue("items[0].name", "");
 
-        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+        expect(form.getValidationMessage("items[0].name")?.text).toBe("Name is required");
     });
 });
 
@@ -443,7 +568,7 @@ describe("KertyForm – fieldDriven validation of primitive array items", () => 
 
         form.validate();
 
-        expect(form.getFieldValidationMessage("numbers[1]")?.text).toBe("number two is not allowed");
+        expect(form.getValidationMessage("numbers[1]")?.text).toBe("number two is not allowed");
     });
 
     it.each(["numbers[0]", "numbers[2]"])("should not report a message on %s when its value passes the rule", (fieldName) => {
@@ -451,7 +576,7 @@ describe("KertyForm – fieldDriven validation of primitive array items", () => 
 
         form.validate();
 
-        expect(form.getFieldValidationMessage(fieldName)).toBeUndefined();
+        expect(form.getValidationMessage(fieldName)).toBeUndefined();
     });
 
     it("should attach the message to the failing primitive item when the builder rule checks the item value", () => {
@@ -465,7 +590,7 @@ describe("KertyForm – fieldDriven validation of primitive array items", () => 
         const result = form.validate();
 
         expect([...result.invalidFields]).toEqual(["numbers[1]"]);
-        expect(form.getFieldValidationMessage("numbers[1]")?.text).toBe("number two is not allowed");
+        expect(form.getValidationMessage("numbers[1]")?.text).toBe("number two is not allowed");
     });
 });
 
@@ -495,7 +620,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.appendItems("items", { name: "" });
 
-        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("Name is required");
+        expect(form.getValidationMessage("items[1].name")?.text).toBe("Name is required");
     });
 
     it("should make the form invalid when an appended item fails a rule", () => {
@@ -514,7 +639,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.validate();
 
-        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("Name is required");
+        expect(form.getValidationMessage("items[1].name")?.text).toBe("Name is required");
     });
 
     it("should clear the message of the first item when a valid item is prepended before the failing one", () => {
@@ -523,7 +648,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.prependItems("items", { name: "John" });
 
-        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[0].name")).toBeUndefined();
     });
 
     it("should report the message at the new index of the failing item when a valid item is prepended", () => {
@@ -532,7 +657,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.prependItems("items", { name: "John" });
 
-        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("Name is required");
+        expect(form.getValidationMessage("items[1].name")?.text).toBe("Name is required");
     });
 
     it("should report the message at the new index of the failing item when two items are swapped", () => {
@@ -541,7 +666,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.swapItem("items", 0, 1);
 
-        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+        expect(form.getValidationMessage("items[0].name")?.text).toBe("Name is required");
     });
 
     it("should clear the message of the swapped-away index when two items are swapped", () => {
@@ -550,7 +675,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.swapItem("items", 0, 1);
 
-        expect(form.getFieldValidationMessage("items[1].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[1].name")).toBeUndefined();
     });
 
     it("should clear the message of the removed item when the only failing item is removed", () => {
@@ -559,7 +684,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.removeItems("items", 0);
 
-        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[0].name")).toBeUndefined();
     });
 
     it("should make the form valid when the only failing item is removed", () => {
@@ -577,7 +702,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.removeItems("items", 1);
 
-        expect(form.getFieldValidationMessage("items[1].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[1].name")).toBeUndefined();
     });
 
     it("should keep the message of the remaining failing item when the last item is removed", () => {
@@ -586,7 +711,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.removeItems("items", 1);
 
-        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+        expect(form.getValidationMessage("items[0].name")?.text).toBe("Name is required");
     });
 
     it("should report the message when an existing item is replaced by a failing one", () => {
@@ -595,7 +720,7 @@ describe("KertyForm – fieldDriven revalidation after an array mutation", () =>
 
         form.updateItem("items", 0, { name: "" });
 
-        expect(form.getFieldValidationMessage("items[0].name")?.text).toBe("Name is required");
+        expect(form.getValidationMessage("items[0].name")?.text).toBe("Name is required");
     });
 });
 
@@ -625,7 +750,7 @@ describe("KertyForm – fieldDriven validation of orphaned item fields after rem
 
         form.removeItems("items", 0);
 
-        expect(form.getFieldValidationMessage("items[2].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[2].name")).toBeUndefined();
     });
 
     it("should mark the orphaned last index as valid when an earlier item is removed", () => {
@@ -664,7 +789,7 @@ describe("KertyForm – messageDriven revalidation on change", () => {
 
         form.setFieldValue("username", "bob");
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should keep messages for the still-failing fields when one field is corrected", () => {
@@ -673,7 +798,7 @@ describe("KertyForm – messageDriven revalidation on change", () => {
 
         form.setFieldValue("username", "bob");
 
-        expect(form.getFieldValidationMessage("password")?.text).toBe("Password is required");
+        expect(form.getValidationMessage("password")?.text).toBe("Password is required");
     });
 
     it("should make the form valid when every field is corrected", () => {
@@ -691,7 +816,7 @@ describe("KertyForm – messageDriven revalidation on change", () => {
 
         form.setFieldValue("username", "");
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it.each([
@@ -705,7 +830,7 @@ describe("KertyForm – messageDriven revalidation on change", () => {
 
         form.setFieldValue("username", "bob");
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should notify another field's listener when a change clears that field's message", () => {
@@ -824,7 +949,7 @@ describe("KertyForm.applyFieldValidationResult", () => {
 
         form.applyFieldValidationResult("username", error("Taken"));
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
+        expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
     it("should mark the field invalid when an error-severity result is applied", () => {
@@ -858,7 +983,7 @@ describe("KertyForm.applyFieldValidationResult", () => {
         form.applyFieldValidationResult("username", error("First"));
         form.applyFieldValidationResult("username", error("Second"), { mode: "merge" });
 
-        expect(form.getFieldValidationResult("username")?.messages.map(m => m.text)).toEqual(["First", "Second"]);
+        expect(form.getValidationResult("username")?.messages.map(m => m.text)).toEqual(["First", "Second"]);
     });
 
     it("should clear a warning when an empty result is applied in patch mode", () => {
@@ -867,7 +992,7 @@ describe("KertyForm.applyFieldValidationResult", () => {
 
         form.applyFieldValidationResult("username", new ValidationResult());
 
-        expect(form.getFieldValidationResult("username")).toBeUndefined();
+        expect(form.getValidationResult("username")).toBeUndefined();
     });
 });
 
@@ -878,7 +1003,7 @@ describe("KertyForm – externally applied field results without a validator", (
 
         form.setFieldValue("username", "alice");
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should make the field valid again when the field changes afterwards", () => {
@@ -915,21 +1040,56 @@ describe("KertyForm – externally applied field results without a validator", (
 
         form.setFieldValue("username", "alice");
 
-        expect(form.getFieldValidationMessage("password")?.text).toBe("Too short");
+        expect(form.getValidationMessage("password")?.text).toBe("Too short");
     });
 });
 
-describe("KertyForm.getFieldValidationResult", () => {
+describe("KertyForm.getValidationResult", () => {
+    it("should return the form result when no name is passed", () => {
+        const form = mountedForm();
+        form.applyValidationResult(error("Login failed"));
+
+        expect(form.getValidationResult()?.messages[0].text).toBe("Login failed");
+    });
+
+    it("should return the form result when the name is null", () => {
+        const form = mountedForm();
+        form.applyValidationResult(error("Login failed"));
+
+        expect(form.getValidationResult(null)?.messages[0].text).toBe("Login failed");
+    });
+
+    it("should not return a field result when no name is passed", () => {
+        const form = mountedForm();
+        form.applyFieldValidationResult("username", error("Taken"));
+
+        expect(form.getValidationResult()).toBeUndefined();
+    });
+
+    it("should not return the form result when a field name is passed", () => {
+        const form = mountedForm();
+        form.applyValidationResult(error("Login failed"));
+
+        expect(form.getValidationResult("username")).toBeUndefined();
+    });
+
+    it("should return the first form message when the message is read with a null name", () => {
+        const form = mountedForm();
+        form.applyValidationResult(error("Login failed"));
+
+        expect(form.getValidationMessage(null)?.text).toBe("Login failed");
+    });
+
     it("should return undefined when the field was never registered", () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: { username: "bob" } });
 
-        expect(form.getFieldValidationResult("username")).toBeUndefined();
+        expect(form.getValidationResult("username")).toBeUndefined();
     });
 
     it("should register the field when its validation result is read", () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: { username: "bob" } });
 
-        form.getFieldValidationResult("username");
+        form.getValidationResult("username");
 
         expect(form.getFieldValue("username")).toBe("bob");
     });
@@ -937,7 +1097,7 @@ describe("KertyForm.getFieldValidationResult", () => {
     it("should not register the field when its validation message is read", () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: { username: "bob" } });
 
-        form.getFieldValidationMessage("username");
+        form.getValidationMessage("username");
 
         expect(form.getFieldState("username").isValidated).toBe(false);
     });
@@ -945,21 +1105,21 @@ describe("KertyForm.getFieldValidationResult", () => {
     it("should return undefined when the field name is not a valid path", () => {
         const form = new KertyForm<any>({ data: { username: "bob" } });
 
-        expect(() => form.getFieldValidationResult("not a path")).toThrowErrorMatchingSnapshot("Invalid field path: empty spaces are not allowed");
+        expect(() => form.getValidationResult("not a path")).toThrowErrorMatchingSnapshot("Invalid field path: empty spaces are not allowed");
     });
 
     it("should return the result when the validator reported on a field with no listener", () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator: requiredLoginValidator() });
         form.validate();
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
     });
 
     it("should return the result when the field is registered", () => {
         const form = mountedForm();
         form.applyFieldValidationResult("username", error("Taken"));
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
+        expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
     it("should stop returning the result once the field unsubscribes when field state is not kept without listeners", () => {
@@ -969,7 +1129,7 @@ describe("KertyForm.getFieldValidationResult", () => {
 
         unsubscribe();
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 });
 
@@ -979,7 +1139,7 @@ describe("KertyForm.applyValidationResults", () => {
 
         form.applyValidationResults(new Map([["username", error("Taken")]]));
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
+        expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
     it("should apply the form result when the map contains the empty key", () => {
@@ -996,7 +1156,7 @@ describe("KertyForm.applyValidationResults", () => {
 
         form.applyValidationResults(new Map([["password", error("Too short")]]), { mode: "replace" });
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should keep previous field results when applied in merge mode", () => {
@@ -1005,7 +1165,7 @@ describe("KertyForm.applyValidationResults", () => {
 
         form.applyValidationResults(new Map([["password", error("Too short")]]), { mode: "merge" });
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
+        expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
     it("should clear a field result when the map holds an empty result for it in merge mode", () => {
@@ -1014,7 +1174,7 @@ describe("KertyForm.applyValidationResults", () => {
 
         form.applyValidationResults(new Map([["username", new ValidationResult()]]), { mode: "merge" });
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should make the form valid again when every field result is cleared in merge mode", () => {
@@ -1032,7 +1192,7 @@ describe("KertyForm.applyValidationResults", () => {
 
         form.applyValidationResults(new Map(), { mode: "merge" });
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Taken");
+        expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
     it("should clear the previous form result when applied in replace mode", () => {
@@ -1099,7 +1259,7 @@ describe("KertyForm.resetValidationResults", () => {
 
         form.resetValidationResults();
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should make the form valid again when called without arguments", () => {
@@ -1126,7 +1286,7 @@ describe("KertyForm.resetValidationResults", () => {
 
         form.resetFieldValidationResults("username");
 
-        expect(form.getFieldValidationMessage("password")?.text).toBe("Password is required");
+        expect(form.getValidationMessage("password")?.text).toBe("Password is required");
     });
 
     it("should clear the named field when called with a field name", () => {
@@ -1135,7 +1295,7 @@ describe("KertyForm.resetValidationResults", () => {
 
         form.resetFieldValidationResults("username");
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should clear every named field when called with a list", () => {
@@ -1179,7 +1339,7 @@ describe("KertyForm.resetValidationResults", () => {
 
         form.addFieldListener("items[1].name", () => { });
 
-        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("Name is required");
+        expect(form.getValidationMessage("items[1].name")?.text).toBe("Name is required");
     });
 });
 
@@ -1201,7 +1361,7 @@ describe("KertyForm.reset – validation", () => {
 
         form.reset();
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should make the form valid again when the form is reset", () => {
@@ -1257,7 +1417,7 @@ describe("KertyForm.setValidator", () => {
 
         form.setValidator(undefined);
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
     });
 });
 
@@ -1287,7 +1447,7 @@ describe("KertyForm – clearing validation of fields inside an array item", () 
 
         clear(form);
 
-        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[0].name")).toBeUndefined();
     });
 
     it.each(clearingOperations)("should clear the item field message when $operation runs and the item itself is registered too", ({ clear }) => {
@@ -1295,7 +1455,7 @@ describe("KertyForm – clearing validation of fields inside an array item", () 
 
         clear(form);
 
-        expect(form.getFieldValidationMessage("items[0].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[0].name")).toBeUndefined();
     });
 });
 
@@ -1325,7 +1485,7 @@ describe("KertyForm – registration order of an array item and its fields", () 
 
         form.reset();
 
-        expect(form.getFieldValidationMessage("items[0]")).toBeUndefined();
+        expect(form.getValidationMessage("items[0]")).toBeUndefined();
     });
 });
 
@@ -1361,7 +1521,7 @@ describe("KertyForm.removeItems – clearing validation of removed items", () =>
 
         form.removeItems("items", 0);
 
-        expect(form.getFieldValidationMessage("itemsArchive")?.text).toBe("itemsArchive is invalid");
+        expect(form.getValidationMessage("itemsArchive")?.text).toBe("itemsArchive is invalid");
     });
 
     it("should clear the message of a nested field of the removed item when an item is removed", () => {
@@ -1369,7 +1529,7 @@ describe("KertyForm.removeItems – clearing validation of removed items", () =>
 
         form.removeItems("items", 1);
 
-        expect(form.getFieldValidationMessage("items[1].address.city")).toBeUndefined();
+        expect(form.getValidationMessage("items[1].address.city")).toBeUndefined();
     });
 
     it("should clear the message of the removed item when the item at the last index is removed", () => {
@@ -1377,7 +1537,7 @@ describe("KertyForm.removeItems – clearing validation of removed items", () =>
 
         form.removeItems("items", 2);
 
-        expect(form.getFieldValidationMessage("items[2].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[2].name")).toBeUndefined();
     });
 
     it("should clear the message of every removed item when several items are removed", () => {
@@ -1386,8 +1546,8 @@ describe("KertyForm.removeItems – clearing validation of removed items", () =>
         form.removeItems("items", [0, 2]);
 
         expect([
-            form.getFieldValidationMessage("items[0].name"),
-            form.getFieldValidationMessage("items[2].name"),
+            form.getValidationMessage("items[0].name"),
+            form.getValidationMessage("items[2].name"),
         ]).toEqual([undefined, undefined]);
     });
 
@@ -1396,7 +1556,7 @@ describe("KertyForm.removeItems – clearing validation of removed items", () =>
 
         form.removeItems("items", 1);
 
-        expect(form.getFieldValidationMessage("items")).toBeUndefined();
+        expect(form.getValidationMessage("items")).toBeUndefined();
     });
 
     it("should clear the message of the array field when its last item is removed", () => {
@@ -1404,7 +1564,7 @@ describe("KertyForm.removeItems – clearing validation of removed items", () =>
 
         form.removeItems("items", 0);
 
-        expect(form.getFieldValidationMessage("items")).toBeUndefined();
+        expect(form.getValidationMessage("items")).toBeUndefined();
     });
 
     it("should clear the message of a removed nested array item that has its own items registered", () => {
@@ -1412,7 +1572,7 @@ describe("KertyForm.removeItems – clearing validation of removed items", () =>
 
         form.removeItems("matrix", 0);
 
-        expect(form.getFieldValidationMessage("matrix[0]")).toBeUndefined();
+        expect(form.getValidationMessage("matrix[0]")).toBeUndefined();
     });
 
     it("should make the form valid when the removed item held the only failing field", () => {
@@ -1434,7 +1594,7 @@ describe("KertyForm.removeItems – moving validation of later items", () => {
 
         form.removeItems("items", 1);
 
-        expect(form.getFieldValidationMessage("items[9].name")?.text).toBe("items[10].name is invalid");
+        expect(form.getValidationMessage("items[9].name")?.text).toBe("items[10].name is invalid");
     });
 
     it("should clear the message at the old last index when an earlier item is removed", () => {
@@ -1442,7 +1602,7 @@ describe("KertyForm.removeItems – moving validation of later items", () => {
 
         form.removeItems("items", 1);
 
-        expect(form.getFieldValidationMessage("items[10].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[10].name")).toBeUndefined();
     });
 
     it("should mark the moved field as invalid at its new index when an earlier item is removed", () => {
@@ -1458,7 +1618,7 @@ describe("KertyForm.removeItems – moving validation of later items", () => {
 
         form.removeItems("items", 0);
 
-        expect(form.getFieldValidationMessage("items[1].address.city")?.text).toBe("items[2].address.city is invalid");
+        expect(form.getValidationMessage("items[1].address.city")?.text).toBe("items[2].address.city is invalid");
     });
 
     it("should move the message to its new index when an earlier item is removed in silent mode", () => {
@@ -1466,7 +1626,7 @@ describe("KertyForm.removeItems – moving validation of later items", () => {
 
         form.removeItems("items", 0, true);
 
-        expect(form.getFieldValidationMessage("items[1].name")?.text).toBe("items[2].name is invalid");
+        expect(form.getValidationMessage("items[1].name")?.text).toBe("items[2].name is invalid");
     });
 
     it("should clear the message at the old last index when that field still has a listener", () => {
@@ -1475,7 +1635,7 @@ describe("KertyForm.removeItems – moving validation of later items", () => {
 
         form.removeItems("items", 0);
 
-        expect(form.getFieldValidationMessage("items[2].name")).toBeUndefined();
+        expect(form.getValidationMessage("items[2].name")).toBeUndefined();
     });
 });
 
@@ -1486,7 +1646,7 @@ describe("KertyForm – silent changes", () => {
 
         form.setFieldValue("username", "bob", true);
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should restore the field message when a validated field becomes invalid again", () => {
@@ -1496,7 +1656,7 @@ describe("KertyForm – silent changes", () => {
 
         form.setFieldValue("username", "", true);
 
-        expect(form.getFieldValidationMessage("username")?.text).toBe("Username is required");
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
     });
 
     it("should clear an applied field message when the field changes without a validator", () => {
@@ -1505,7 +1665,7 @@ describe("KertyForm – silent changes", () => {
 
         form.setFieldValue("username", "alice", true);
 
-        expect(form.getFieldValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
     it("should make the form valid when the last invalid field changes without a validator", () => {
@@ -1522,7 +1682,7 @@ describe("KertyForm – silent changes", () => {
 
         form.removeItems("items", 1, true);
 
-        expect(form.getFieldValidationMessage("items")).toBeUndefined();
+        expect(form.getValidationMessage("items")).toBeUndefined();
     });
 });
 

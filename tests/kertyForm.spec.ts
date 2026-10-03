@@ -73,6 +73,7 @@ describe("KertyForm – configuration", () => {
             trackTouchOnValueChange: true,
             clearFormValidationResultsOnChange: true,
             keepValidationResultsWithoutListeners: true,
+            cacheValidationResult: true,
         });
     });
 
@@ -915,7 +916,7 @@ describe("KertyForm – field state without listeners", () => {
 
         unsubscribe();
 
-        expect(form.getFieldValidationMessage("email")?.text).toBe("Email is required");
+        expect(form.getValidationMessage("email")?.text).toBe("Email is required");
     });
 
     it("should make the form valid when the last listener of an invalid field unsubscribes and results are not kept", () => {

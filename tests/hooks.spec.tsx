@@ -157,7 +157,7 @@ describe("useField", () => {
     it("should expose the current field value when the field changes", () => {
         const form = { current: null as any };
         const Field = ({ f }: { f: IKertyForm<any> }) => {
-            const field = useField<string>(f, "username");
+            const [field] = useField({ form: f, name: "username" });
             return <span data-testid="value">{field.value ?? ""}</span>;
         };
         const Component = () => {
@@ -175,7 +175,7 @@ describe("useField", () => {
     it("should expose the field state alongside the value when the field is dirty", () => {
         const form = { current: null as any };
         const Field = ({ f }: { f: IKertyForm<any> }) => {
-            const field = useField<string>(f, "username");
+            const [field] = useField({ form: f, name: "username" });
             return <span data-testid="dirty">{String(field.isDirty)}</span>;
         };
         const Component = () => {
@@ -193,7 +193,7 @@ describe("useField", () => {
     it("should expose the field validation result when one is applied", () => {
         const form = { current: null as any };
         const Field = ({ f }: { f: IKertyForm<any> }) => {
-            const field = useField<string>(f, "username");
+            const [field] = useField({ form: f, name: "username" });
             return <span data-testid="message">{field.validationResult?.messages[0]?.text ?? ""}</span>;
         };
         const Component = () => {
@@ -243,15 +243,15 @@ describe("FormField", () => {
         }).toEqual({ parent: before.parent, username: before.username + 1, password: before.password });
     });
 
-    it("should write the value into the form when setFieldValue is called from the render callback", () => {
+    it("should write the value into the form when setValue is called from the render callback", () => {
         const form = { current: null as any };
         const Component = () => {
             const f = useForm<Partial<LoginForm>>();
             form.current = f;
             return (
                 <FormField form={f} name="username">
-                    {({ field, setFieldValue }) => (
-                        <button data-testid="field" onClick={() => setFieldValue("bob")}>{field.value ?? ""}</button>
+                    {({ field }) => (
+                        <button data-testid="field" onClick={() => field.setValue("bob")}>{field.value ?? ""}</button>
                     )}
                 </FormField>
             );
@@ -263,15 +263,15 @@ describe("FormField", () => {
         expect(form.current.getData().username).toBe("bob");
     });
 
-    it("should mark the field touched when touchField is called from the render callback", () => {
+    it("should mark the field touched when touch is called from the render callback", () => {
         const form = { current: null as any };
         const Component = () => {
             const f = useForm<Partial<LoginForm>>();
             form.current = f;
             return (
                 <FormField form={f} name="username">
-                    {({ field, touchField }) => (
-                        <button data-testid="field" onClick={touchField}>{String(field.isTouched)}</button>
+                    {({ field }) => (
+                        <button data-testid="field" onClick={field.touch}>{String(field.isTouched)}</button>
                     )}
                 </FormField>
             );
@@ -658,8 +658,8 @@ describe("FormArrayField", () => {
             form.current = f;
             return (
                 <FormArrayField form={f} name="items">
-                    {({ field, appendItems }) => (
-                        <button data-testid="items" onClick={() => appendItems("b")}>
+                    {({ field }) => (
+                        <button data-testid="items" onClick={() => field.appendItems("b")}>
                             {(field.value ?? []).join(",")}
                         </button>
                     )}
@@ -674,12 +674,12 @@ describe("FormArrayField", () => {
     });
 
     it.each([
-        ["prependItems", (ctx: any) => ctx.prependItems("z"), "z,a,b"],
-        ["insertItems", (ctx: any) => ctx.insertItems(1, "z"), "a,z,b"],
-        ["updateItem", (ctx: any) => ctx.updateItem(0, "z"), "z,b"],
-        ["swapItem", (ctx: any) => ctx.swapItem(0, 1), "b,a"],
-        ["moveItem", (ctx: any) => ctx.moveItem(0, 1), "b,a"],
-        ["setFieldValue", (ctx: any) => ctx.setFieldValue(["z"]), "z"],
+        ["prependItems", (ctx: any) => ctx.field.prependItems("z"), "z,a,b"],
+        ["insertItems", (ctx: any) => ctx.field.insertItems(1, "z"), "a,z,b"],
+        ["updateItem", (ctx: any) => ctx.field.updateItem(0, "z"), "z,b"],
+        ["swapItem", (ctx: any) => ctx.field.swapItem(0, 1), "b,a"],
+        ["moveItem", (ctx: any) => ctx.field.moveItem(0, 1), "b,a"],
+        ["setValue", (ctx: any) => ctx.field.setValue(["z"]), "z"],
     ])("should render %s when the context helper is called", (_label, invoke, expected) => {
         const Component = () => {
             const f = useForm<ListForm>({ data: { items: ["a", "b"] } });
@@ -700,13 +700,13 @@ describe("FormArrayField", () => {
         expect(screen.getByTestId("items").textContent).toBe(expected);
     });
 
-    it("should mark the array field touched when touchField is called", () => {
+    it("should mark the array field touched when touch is called", () => {
         const Component = () => {
             const f = useForm<ListForm>({ data: { items: ["a"] } });
             return (
                 <FormArrayField form={f} name="items">
-                    {({ field, touchField }) => (
-                        <button data-testid="items" onClick={touchField}>{String(field.isTouched)}</button>
+                    {({ field }) => (
+                        <button data-testid="items" onClick={field.touch}>{String(field.isTouched)}</button>
                     )}
                 </FormArrayField>
             );
@@ -725,8 +725,8 @@ describe("FormArrayField", () => {
             form.current = f;
             return (
                 <FormArrayField form={f} name="items">
-                    {({ field, removeItems }) => (
-                        <button data-testid="items" onClick={() => removeItems(0)}>
+                    {({ field }) => (
+                        <button data-testid="items" onClick={() => field.removeItems(0)}>
                             {(field.value ?? []).join(",")}
                         </button>
                     )}
@@ -875,7 +875,7 @@ describe("useField – parent notification", () => {
     it("should re-render the component bound to the parent when a child field changes", () => {
         const form = { current: null as any };
         const Parent = ({ f }: { f: IKertyForm<any> }) => {
-            useField<ParentForm["parent"]>(f, "parent");
+            useField({ form: f, name: "parent" });
             return <RenderCount testId="parent" />;
         };
         const Component = () => {
@@ -894,7 +894,7 @@ describe("useField – parent notification", () => {
     it("should expose the updated child value on the parent snapshot when a child field changes", () => {
         const form = { current: null as any };
         const Parent = ({ f }: { f: IKertyForm<any> }) => {
-            const field = useField<ParentForm["parent"]>(f, "parent");
+            const [field] = useField({ form: f, name: "parent" });
             return <span data-testid="text">{field.value?.text ?? ""}</span>;
         };
         const Component = () => {
@@ -970,7 +970,7 @@ describe("useField – parent notification", () => {
     const renderRows = () => {
         const form = { current: null as any };
         const List = ({ f }: { f: IKertyForm<any> }) => {
-            useField<{ text: string }[]>(f, "rows");
+            useField({ form: f, name: "rows" });
             return <RenderCount testId="rows" />;
         };
         const Component = () => {
@@ -1004,7 +1004,7 @@ describe("useField – parent notification", () => {
     it("should re-render the component bound to an array item when a property of that item changes", () => {
         const form = { current: null as any };
         const Row = ({ f }: { f: IKertyForm<any> }) => {
-            useField<{ text: string }>(f, "rows[0]");
+            useField({ form: f, name: "rows[0]" });
             return <RenderCount testId="row" />;
         };
         const Component = () => {

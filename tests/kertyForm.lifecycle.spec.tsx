@@ -39,12 +39,12 @@ const itemsValidator = {
 const itemsForm = (items: Item[]) => new KertyForm<ItemsForm>({ data: { items }, validator: itemsValidator });
 
 const Cell = ({ form, name }: { form: IKertyForm<ItemsForm>; name: any }) => {
-    const field = useField(form, name);
+    const [field] = useField({ form, name });
     return <span data-testid={name}>{field.validationResult?.messages[0]?.text ?? "-"}</span>;
 };
 
 const ReadOnlyCell = ({ form, name }: { form: IKertyForm<ItemsForm>; name: any }) => {
-    const field = useField(form, name);
+    const [field] = useField({ form, name });
     return <b data-testid={name}>{field.validationResult?.messages[0]?.text ?? "-"}</b>;
 };
 

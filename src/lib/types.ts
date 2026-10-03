@@ -101,112 +101,93 @@ export type ApplyValidationOptions = {
 
 type IsAny<T> = 0 extends (1 & T) ? true : false;
 
-type FieldPathImpl<T, D extends number[] = []> =
-    IsAny<T> extends true
-        ? string
-        : D['length'] extends 5
+type LeafObject = Date | RegExp | Function | Map<any, any> | Set<any> | WeakMap<any, any> | WeakSet<any> | Promise<any>;
+
+type FieldPathImpl<T, TValue, D extends number[]> =
+    D['length'] extends 5
+        ? never
+        : T extends LeafObject | readonly any[]
             ? never
             : T extends object
                 ? {
                     [K in keyof T & string]:
-                    NonNullable<T[K]> extends Array<infer U>
-                        ? K
-                        | `${K}[${number}]`
-                        | (NonNullable<U> extends Array<infer V>
-                        ? `${K}[${number}][${number}]`
-                        | (NonNullable<V> extends object
-                        ? `${K}[${number}][${number}].${FieldPathImpl<NonNullable<V>, [0, 0, ...D]>}`
-                        : never)
-                        : NonNullable<U> extends object
-                            ? `${K}[${number}].${FieldPathImpl<NonNullable<U>, [0, ...D]>}`
-                            : never)
-                        : NonNullable<T[K]> extends object
-                            ? K | `${K}.${FieldPathImpl<NonNullable<T[K]>, [0, ...D]>}`
-                            : K
+                    | (NonNullable<T[K]> extends TValue ? K : never)
+                    | FieldSubPathImpl<K, NonNullable<T[K]>, TValue, [0, ...D]>
                 }[keyof T & string]
                 : never;
 
-type FieldPathValueImpl<T, P extends string> =
-    P extends `${infer K}.${infer Rest}`
-        ? K extends keyof T
-            ? FieldPathValueImpl<NonNullable<T[K]>, Rest>
-            : K extends `${infer K2}[${infer _1}][${infer _2}]`
-                ? K2 extends keyof T
-                    ? NonNullable<T[K2]> extends Array<infer U>
-                        ? NonNullable<U> extends Array<infer V>
-                            ? FieldPathValueImpl<NonNullable<V>, Rest>
-                            : never
-                        : never
-                    : never
-                : K extends `${infer K2}[${infer _1}]`
-                    ? K2 extends keyof T
-                        ? NonNullable<T[K2]> extends Array<infer U>
-                            ? FieldPathValueImpl<NonNullable<U>, Rest>
-                            : never
-                        : never
-                    : never
-        : P extends `${infer K}[${infer _1}][${infer _2}]`
-            ? K extends keyof T
-                ? NonNullable<T[K]> extends Array<infer U>
-                    ? NonNullable<U> extends Array<infer V>
-                        ? V
-                        : never
-                    : never
-                : never
-            : P extends `${infer K}[${infer _1}]`
-                ? K extends keyof T
-                    ? NonNullable<T[K]> extends Array<infer U>
-                        ? U
-                        : never
-                    : never
-                : P extends keyof T
-                    ? T[P]
+type FieldSubPathImpl<P extends string, V, TValue, D extends number[]> =
+    IsAny<V> extends true
+        ? `${P}.${string}`
+        : V extends LeafObject
+            ? never
+            : V extends readonly (infer U)[]
+                ? (NonNullable<U> extends TValue ? `${P}[${number}]` : never)
+                | FieldSubPathImpl<`${P}[${number}]`, NonNullable<U>, TValue, D>
+                : V extends object
+                    ? `${P}.${FieldPathImpl<V, TValue, D>}`
                     : never;
 
-type ArrayFieldPathImpl<T, D extends number[] = []> =
+type ArrayIndexValueImpl<T, P extends string> =
+    P extends `[${string}]${infer Rest}`
+        ? NonNullable<T> extends readonly (infer U)[]
+            ? Rest extends ""
+                ? U
+                : ArrayIndexValueImpl<U, Rest>
+            : never
+        : never;
+
+type FieldSegmentValueImpl<T, P extends string> =
+    P extends keyof T
+        ? T[P]
+        : P extends `${infer K}[${infer I}]${infer Rest}`
+            ? K extends keyof T
+                ? ArrayIndexValueImpl<T[K], `[${I}]${Rest}`>
+                : never
+            : never;
+
+type FieldPathValueImpl<T, P extends string> =
     IsAny<T> extends true
-        ? string
-        : D['length'] extends 5
-            ? never
-            : T extends object
-                ? {
-                    [K in keyof T & string]:
-                    NonNullable<T[K]> extends Array<infer U>
-                        ? K
-                        | (NonNullable<U> extends Array<any>
-                        ? `${K}[${number}]`
-                        : NonNullable<U> extends object
-                            ? `${K}[${number}].${ArrayFieldPathImpl<NonNullable<U>, [0, ...D]>}`
-                            : never)
-                        : NonNullable<T[K]> extends object
-                            ? `${K}.${ArrayFieldPathImpl<NonNullable<T[K]>, [0, ...D]>}`
-                            : never
-                }[keyof T & string]
-                : never;
+        ? any
+        : P extends `${infer K}.${infer Rest}`
+            ? FieldPathValueImpl<NonNullable<FieldSegmentValueImpl<T, K>>, Rest>
+            : FieldSegmentValueImpl<T, P>;
 
-export type FieldPath<T> = IsAny<T> extends true ? string : FieldPathImpl<T>;
+export type FieldPath<T> = IsAny<T> extends true ? string : FieldPathImpl<T, unknown, []>;
 
-export type FieldPathValue<T, P extends string> = IsAny<T> extends true ? any : FieldPathValueImpl<T, P>;
+export type FieldPathValue<T, P extends string> = FieldPathValueImpl<T, P>;
 
-export type ArrayFieldPath<T> = IsAny<T> extends true ? string : ArrayFieldPathImpl<T>;
+export type ArrayFieldPath<T> = IsAny<T> extends true ? string : FieldPathImpl<T, readonly unknown[], []>;
 
 export type ArrayItemType<T, P extends string> =
     IsAny<T> extends true
         ? any
-        : NonNullable<FieldPathValue<T, P>> extends Array<infer U>
+        : NonNullable<FieldPathValue<T, P>> extends readonly (infer U)[]
             ? U
             : never;
 
-export type FieldPathByValue<T, TValue> =
-    IsAny<T> extends true
-        ? string
-        : FieldPath<T> extends infer P
-            ? P extends string
-                ? NonNullable<FieldPathValue<T, P>> extends TValue
-                    ? P
-                    : never
-                : never
+export type FieldPathByValue<T, TValue> = IsAny<T> extends true ? string : FieldPathImpl<T, TValue, []>;
+
+type ParentFieldPath<P extends string, TParent extends string = ""> =
+    P extends `${infer Head}.${infer Tail}`
+        ? ParentFieldPath<Tail, TParent extends "" ? Head : `${TParent}.${Head}`>
+        : TParent;
+
+/**
+ * Validates `P` as a field path of `T` whose value matches `TValue`.
+ * An invalid or partially typed `P` resolves to the concrete paths below its parent path,
+ * so editors can suggest the fields of array items such as `rows[0].`.
+ */
+export type AutoFieldPath<T, P extends string, TValue = unknown> =
+    P extends FieldPathByValue<T, TValue>
+        ? P
+        : ParentFieldPath<P> extends infer TParent extends string
+            ? TParent extends ""
+                ? FieldPathByValue<T, TValue>
+                : `${TParent}.${FieldPathByValue<NonNullable<FieldPathValue<T, TParent>>, TValue>}`
             : never;
+
+export type AutoArrayFieldPath<T, P extends string> = AutoFieldPath<T, P, readonly unknown[]>;
 
 export type FormValidateResult = {
     isValid: boolean;
@@ -260,6 +241,7 @@ export type FormConfig = {
     trackTouchOnValueChange?: boolean;
     clearFormValidationResultsOnChange?: boolean;
     keepValidationResultsWithoutListeners?: boolean;
+    cacheValidationResult?: boolean;
 }
 
 /**
@@ -298,8 +280,8 @@ interface IFormValidation<TData> {
 
     applyValidationResult(result: IValidationResult, options?: ApplyValidationOptions): void;
 
-    applyFieldValidationResult<TPath extends FieldPath<TData>>(
-        name: TPath,
+    applyFieldValidationResult<TPath extends string>(
+        name: AutoFieldPath<TData, TPath>,
         result: IValidationResult,
         options?: ApplyValidationOptions
     ): void;
@@ -308,64 +290,58 @@ interface IFormValidation<TData> {
 
     resetValidationResults(): void;
 
-    resetFieldValidationResults<TPath extends FieldPath<TData>>(name: TPath | TPath[]): void;
+    resetFieldValidationResults<TPath extends string>(name: AutoFieldPath<TData, TPath> | AutoFieldPath<TData, TPath>[]): void;
 
-    getValidationResult(): IValidationResult | undefined;
+    getValidationResult<TPath extends string>(name?: AutoFieldPath<TData, TPath> | null): IValidationResult | undefined;
 
-    getValidationMessage(): ValidationMessage | undefined;
-    
-    getFieldValidationResult<TPath extends FieldPath<TData>>(name: TPath): IValidationResult | undefined;
-    
-    getFieldValidationMessage<TPath extends FieldPath<TData>>(name: TPath): ValidationMessage | undefined;
+    getValidationMessage<TPath extends string>(name?: AutoFieldPath<TData, TPath> | null): ValidationMessage | undefined;
 
     getInvalidFields(): string[];
-
-
 }
 
 interface IFormArrayActions<TData> {
 
-    prependItems<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    prependItems<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         value: ArrayItemType<TData, TPath> | ArrayItemType<TData, TPath>[],
         silent?: boolean
     ): void;
     
-    appendItems<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    appendItems<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         value: ArrayItemType<TData, TPath> | ArrayItemType<TData, TPath>[],
         silent?: boolean
     ): void;
     
-    insertItems<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    insertItems<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         index: number,
         value: ArrayItemType<TData, TPath> | ArrayItemType<TData, TPath>[],
         silent?: boolean
     ): void;
     
-    removeItems<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    removeItems<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         index: number | number[],
         silent?: boolean
     ): void;
     
-    swapItem<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    swapItem<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         fromIndex: number,
         toIndex: number,
         silent?: boolean
     ): void;
 
-    moveItem<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    moveItem<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         fromIndex: number,
         toIndex: number,
         silent?: boolean
     ): void;
     
-    updateItem<TPath extends ArrayFieldPath<TData>>(
-        name: TPath,
+    updateItem<TPath extends string>(
+        name: AutoArrayFieldPath<TData, TPath>,
         index: number,
         value: ArrayItemType<TData, TPath>,
         silent?: boolean
@@ -375,19 +351,20 @@ interface IFormArrayActions<TData> {
 export interface IKertyForm<TData> extends IFormValidation<TData>, IFormArrayActions<TData> {
     updateConfiguration(config: FormConfig): void;
     addListener(listener: () => void, options?: Omit<FormListenerOptions, 'fieldName' | 'scope'> ): () => void;
-    addFieldListener<TPath extends FieldPath<TData>>(name: TPath, listener: () => void, scope?: FieldListenerScope): () => void;
+    addFieldListener<TPath extends string>(name: AutoFieldPath<TData, TPath>, listener: () => void, scope?: FieldListenerScope): () => void;
     getData(): TData;
     getState(): FormState;
     getSnapshot(): () => FormSnapshot<TData>;
     getDataSnapshot<TValue>(getValue: (data: TData) => TValue): () => TValue;
     getStateSnapshot<TValue>(getValue: (state: FormState) => TValue): () => TValue;
-    getFieldSnapshot<TPath extends FieldPath<TData>>(name: TPath): () => FieldSnapshot<FieldPathValue<TData, TPath>>;
-    getFieldValue<TPath extends FieldPath<TData>>(name: TPath): FieldPathValue<TData, TPath> | undefined;
-    getFieldState<TPath extends FieldPath<TData>>(name: TPath): FieldState;
+    getFieldSnapshot<TPath extends string>(name: AutoFieldPath<TData, TPath>): () => FieldSnapshot<FieldPathValue<TData, TPath>>;
+    getFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath>): FieldPathValue<TData, TPath> | undefined;
+    getFieldState<TPath extends string>(name: AutoFieldPath<TData, TPath>): FieldState;
+    setFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath>, value: FieldPathValue<TData, TPath> | null | undefined, silent?: boolean): void;
     setFieldValue<TValue>(name: FieldPathByValue<TData, TValue>, value: TValue | null | undefined, silent?: boolean): void;
-    setFieldValue<TPath extends FieldPath<TData>>(name: TPath, value: FieldPathValue<TData, TPath> | null | undefined, silent?: boolean): void;
-    clearFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent?: boolean): void;
-    removeFieldValue<TPath extends FieldPath<TData>>(name: TPath | TPath[], silent?: boolean): void;
-    touch(name?: FieldPath<TData>): void;
+    clearFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath> | AutoFieldPath<TData, TPath>[], silent?: boolean): void;
+    removeFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath> | AutoFieldPath<TData, TPath>[], silent?: boolean): void;
+    touch<TPath extends string>(name?: AutoFieldPath<TData, TPath>): void;
+    touch<TValue>(name?: FieldPathByValue<TData, TValue>): void;
     reset(data?: TData): void;
 }

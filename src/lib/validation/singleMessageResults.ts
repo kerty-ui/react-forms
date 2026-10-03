@@ -1,5 +1,5 @@
 ﻿import { ValidationResult } from "./validationResult";
-import { Severity, type FieldPath, type IValidationResult, type MessageSeverity } from "../types";
+import { Severity, type AutoFieldPath, type IValidationResult, type MessageSeverity } from "../types";
 
 export class SingleMessageResults<TData> extends Map<string, IValidationResult> {
 
@@ -21,7 +21,7 @@ export class SingleMessageResults<TData> extends Map<string, IValidationResult> 
         return this;
     }
 
-    setFieldMessage(name: FieldPath<TData>, text: string, severity: MessageSeverity = Severity.Error) {
+    setFieldMessage<TPath extends string>(name: AutoFieldPath<TData, TPath>, text: string, severity: MessageSeverity = Severity.Error) {
         if(severity === Severity.Error) {
             this.isValid = false;
         }

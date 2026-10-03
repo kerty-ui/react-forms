@@ -761,7 +761,7 @@ const personsForm = () => {
 
 const itemFieldState = (form: KertyForm<PersonsForm>, fieldName: FieldPath<PersonsForm>) => {
     const { isTouched, isValid, isValidated } = form.getFieldState(fieldName);
-    return { isTouched, isValid, isValidated, messages: form.getFieldValidationResult(fieldName)?.messages };
+    return { isTouched, isValid, isValidated, messages: form.getValidationResult(fieldName)?.messages };
 };
 
 describe("KertyForm.removeFieldValue on an array item path", () => {
@@ -791,7 +791,7 @@ describe("KertyForm.removeFieldValue on an array item path", () => {
 
         form.removeFieldValue("items[1]");
 
-        expect(form.getFieldValidationMessage("items[1]")?.text).toBe("c is invalid");
+        expect(form.getValidationMessage("items[1]")?.text).toBe("c is invalid");
     });
 });
 

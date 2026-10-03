@@ -83,8 +83,8 @@ const LoginForm = () => {
             }
         }),
     });
-    const usernameMessage = form.getFieldValidationMessage("username");
-    const passwordMessage = form.getFieldValidationMessage("password");
+    const usernameMessage = form.getValidationMessage("username");
+    const passwordMessage = form.getValidationMessage("password");
     return (
         <form onSubmit={e => {
             e.stopPropagation();

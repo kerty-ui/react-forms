@@ -61,7 +61,7 @@ const KertyValidationOnSubmitExample = () => {
                         value={data.username ?? ""}
                         onChange={(e) => form.setFieldValue("username", e.target.value)}
                     />
-                    <FieldMessage message={form.getFieldValidationMessage("username")} />
+                    <FieldMessage message={form.getValidationMessage("username")} />
                 </div>
                 <div className="field">
                     <label>Password <RenderCount /></label>
@@ -71,7 +71,7 @@ const KertyValidationOnSubmitExample = () => {
                         value={data.password ?? ""}
                         onChange={(e) => form.setFieldValue("password", e.target.value)}
                     />
-                    <FieldMessage message={form.getFieldValidationMessage("password")} />
+                    <FieldMessage message={form.getValidationMessage("password")} />
                 </div>
                 <div>
                     <button type="submit">
@@ -159,7 +159,7 @@ const FieldMessage = (props: {
                             value={data.username ?? ""}
                             onChange={(e) => form.setFieldValue("username", e.target.value)}
                         />
-                        <FieldMessage message={form.getFieldValidationMessage("username")} />
+                        <FieldMessage message={form.getValidationMessage("username")} />
                     </div>
                     <div className="field">
                         <label>Password <RenderCount /></label>
@@ -169,7 +169,7 @@ const FieldMessage = (props: {
                             value={data.password ?? ""}
                             onChange={(e) => form.setFieldValue("password", e.target.value)}
                         />
-                        <FieldMessage message={form.getFieldValidationMessage("password")} />
+                        <FieldMessage message={form.getValidationMessage("password")} />
                     </div>
                     <div
                         role="group"

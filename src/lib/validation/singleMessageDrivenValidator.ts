@@ -6,7 +6,7 @@ import {
     type MessageSeverity,
     type ValidatorContext,
     type ValidatorMode,
-    type FieldPath,
+    type AutoFieldPath,
 } from "./../types";
 
 type ValidateFn<TData> = (
@@ -15,15 +15,15 @@ type ValidateFn<TData> = (
 ) => void;
 
 interface IValidationResultBuilder<TData> {
-    setFieldMessage: (name: FieldPath<TData>, text: string, severity?: MessageSeverity) => void;
+    setFieldMessage: <TPath extends string>(name: AutoFieldPath<TData, TPath>, text: string, severity?: MessageSeverity) => void;
 }
 
 class ValidationResultBuilder<TData> implements IValidationResultBuilder<TData> {
 
     validationResult = new Map<string, IValidationResult>();
 
-    setFieldMessage(
-        name: FieldPath<TData>,
+    setFieldMessage<TPath extends string>(
+        name: AutoFieldPath<TData, TPath>,
         text: string,
         severity: MessageSeverity = Severity.Error,
     ) {

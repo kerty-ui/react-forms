@@ -1,5 +1,5 @@
 ﻿import { ValidationResult } from "./validationResult";
-import { Severity, type FieldPath, type IValidationResult, type MessageSeverity } from "../types";
+import { Severity, type AutoFieldPath, type IValidationResult, type MessageSeverity } from "../types";
 
 export class MultiMessageResults<TData> extends Map<string, IValidationResult> {
 
@@ -12,7 +12,7 @@ export class MultiMessageResults<TData> extends Map<string, IValidationResult> {
         return this.#addMessage("", text, severity);
     }
 
-    addFieldMessage(name: FieldPath<TData>, text: string, severity: MessageSeverity = Severity.Error) {
+    addFieldMessage<TPath extends string>(name: AutoFieldPath<TData, TPath>, text: string, severity: MessageSeverity = Severity.Error) {
         return this.#addMessage(name, text, severity);
     }
 
