@@ -22,6 +22,7 @@ import {
     useFormWatch,
     useStateWatch,
     useWatch,
+    type FormState,
     type IKertyForm,
 } from "../src/lib";
 
@@ -477,6 +478,45 @@ describe("useDataWatch", () => {
         expect(renderCountOf("watcher")).toBe(before);
     });
 
+    describe("object selector without isEqual", () => {
+        const selectUsername = (data: LoginForm) => ({ username: data.username });
+        const Watcher = ({ f }: { f: IKertyForm<LoginForm> }) => {
+            const selected = useDataWatch(f, data => ({ username: data.username }));
+            return <span data-testid="username">{selected.username}</span>;
+        };
+
+        it("should render the selected value when the selector returns a new object on every call", () => {
+            const form = new KertyForm<LoginForm>({ data: { username: "alice", password: "" } });
+
+            render(<Watcher f={form} />);
+
+            expect(screen.getByTestId("username").textContent).toBe("alice");
+        });
+
+        it("should re-render the subscriber with the new value when the selected data changes", () => {
+            const form = new KertyForm<LoginForm>({ data: { username: "alice", password: "" } });
+            render(<Watcher f={form} />);
+
+            act(() => form.setFieldValue("username", "bob"));
+
+            expect(screen.getByTestId("username").textContent).toBe("bob");
+        });
+
+        it("should return the same reference when re-rendered with a stable selector and unchanged data", () => {
+            const form = new KertyForm<LoginForm>({ data: { username: "alice", password: "" } });
+            const results: unknown[] = [];
+            const Recorder = ({ f }: { f: IKertyForm<LoginForm> }) => {
+                results.push(useDataWatch(f, selectUsername));
+                return null;
+            };
+            const { rerender } = render(<Recorder f={form} />);
+
+            rerender(<Recorder f={form} />);
+
+            expect(results.at(-1)).toBe(results[0]);
+        });
+    });
+
     describe("isEqual", () => {
         const Watcher = ({ f }: { f: IKertyForm<LoginForm> }) => {
             const selected = useDataWatch(f, data => ({ username: data.username }), shallowEqual);
@@ -638,6 +678,45 @@ describe("useStateWatch", () => {
         act(() => form.current.setFieldValue("a", 3));
 
         expect(renderCountOf("watcher")).toBe(before);
+    });
+
+    describe("object selector without isEqual", () => {
+        const selectIsDirty = (state: FormState) => ({ isDirty: state.isDirty });
+        const Watcher = ({ f }: { f: IKertyForm<any> }) => {
+            const selected = useStateWatch(f, state => ({ isDirty: state.isDirty }));
+            return <span data-testid="dirty">{String(selected.isDirty)}</span>;
+        };
+
+        it("should render the selected value when the selector returns a new object on every call", () => {
+            const form = new KertyForm<any>({ data: { a: 1 } });
+
+            render(<Watcher f={form} />);
+
+            expect(screen.getByTestId("dirty").textContent).toBe("false");
+        });
+
+        it("should re-render the subscriber with the new value when the selected state changes", () => {
+            const form = new KertyForm<any>({ data: { a: 1 } });
+            render(<Watcher f={form} />);
+
+            act(() => form.setFieldValue("a", 2));
+
+            expect(screen.getByTestId("dirty").textContent).toBe("true");
+        });
+
+        it("should return the same reference when re-rendered with a stable selector and unchanged state", () => {
+            const form = new KertyForm<any>({ data: { a: 1 } });
+            const results: unknown[] = [];
+            const Recorder = ({ f }: { f: IKertyForm<any> }) => {
+                results.push(useStateWatch(f, selectIsDirty));
+                return null;
+            };
+            const { rerender } = render(<Recorder f={form} />);
+
+            rerender(<Recorder f={form} />);
+
+            expect(results.at(-1)).toBe(results[0]);
+        });
     });
 
     describe("isEqual", () => {

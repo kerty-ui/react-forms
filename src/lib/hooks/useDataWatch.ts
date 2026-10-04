@@ -23,23 +23,21 @@ export const useDataWatch = <TData,TValue,>(
     );
     const cache = useRef<DataWatchCache<TData, TValue>>({ hasValue: false, data: undefined, getValue: undefined, value: undefined });
     const getDataSnapshot = useMemo(
-        () => isEqual
-            ? () => {
-                const data = form.getData();
-                const prev = cache.current;
-                if (prev.hasValue && prev.data === data && prev.getValue === getValue) {
-                    return prev.value as TValue;
-                }
-                const value = getValue(data);
-                if (!prev.hasValue || !isEqual(prev.value as TValue, value)) {
-                    prev.value = value;
-                    prev.hasValue = true;
-                }
-                prev.data = data;
-                prev.getValue = getValue;
+        () => () => {
+            const data = form.getData();
+            const prev = cache.current;
+            if (prev.hasValue && prev.data === data && prev.getValue === getValue) {
                 return prev.value as TValue;
             }
-            : form.getDataSnapshot<TValue>(getValue),
+            const value = getValue(data);
+            if (!prev.hasValue || isEqual == null || !isEqual(prev.value as TValue, value)) {
+                prev.value = value;
+                prev.hasValue = true;
+            }
+            prev.data = data;
+            prev.getValue = getValue;
+            return prev.value as TValue;
+        },
         [form, getValue, isEqual]
     );
     return useSyncExternalStore(subscribe, getDataSnapshot);

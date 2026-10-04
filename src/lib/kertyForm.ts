@@ -480,14 +480,6 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    getDataSnapshot<TValue>(getValue: (data: TData) => TValue) {
-        return () => getValue(this.#data);
-    }
-
-    getStateSnapshot<TValue>(getValue: (state: FormState) => TValue) {
-        return () => getValue(this.#state);
-    }
-
     getFieldSnapshot<TPath extends string>(name: AutoFieldPath<TData, TPath>) {
         type TValue = FieldPathValue<TData, TPath>;
 

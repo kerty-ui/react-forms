@@ -362,8 +362,6 @@ export interface IKertyForm<TData> extends IFormValidation<TData>, IFormArrayAct
     getData(): TData;
     getState(): FormState;
     getSnapshot(): () => FormSnapshot<TData>;
-    getDataSnapshot<TValue>(getValue: (data: TData) => TValue): () => TValue;
-    getStateSnapshot<TValue>(getValue: (state: FormState) => TValue): () => TValue;
     getFieldSnapshot<TPath extends string>(name: AutoFieldPath<TData, TPath>): () => FieldSnapshot<FieldPathValue<TData, TPath>>;
     getFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath>): FieldPathValue<TData, TPath> | undefined;
     getFieldState<TPath extends string>(name: AutoFieldPath<TData, TPath>): FieldState;

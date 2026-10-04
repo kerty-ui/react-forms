@@ -22,23 +22,21 @@ export const useStateWatch = <TDataModel,TValue,>(
         [form]);
     const cache = useRef<StateWatchCache<TValue>>({ hasValue: false, state: undefined, getValue: undefined, value: undefined });
     const getStateSnapshot = useMemo(
-        () => isEqual
-            ? () => {
-                const state = form.getState();
-                const prev = cache.current;
-                if (prev.hasValue && prev.state === state && prev.getValue === getValue) {
-                    return prev.value as TValue;
-                }
-                const value = getValue(state);
-                if (!prev.hasValue || !isEqual(prev.value as TValue, value)) {
-                    prev.value = value;
-                    prev.hasValue = true;
-                }
-                prev.state = state;
-                prev.getValue = getValue;
+        () => () => {
+            const state = form.getState();
+            const prev = cache.current;
+            if (prev.hasValue && prev.state === state && prev.getValue === getValue) {
                 return prev.value as TValue;
             }
-            : form.getStateSnapshot<TValue>(getValue),
+            const value = getValue(state);
+            if (!prev.hasValue || isEqual == null || !isEqual(prev.value as TValue, value)) {
+                prev.value = value;
+                prev.hasValue = true;
+            }
+            prev.state = state;
+            prev.getValue = getValue;
+            return prev.value as TValue;
+        },
         [form, getValue, isEqual]
     );
     return useSyncExternalStore(subscribe, getStateSnapshot);

@@ -1202,37 +1202,6 @@ describe("KertyForm.getSnapshot", () => {
     });
 });
 
-describe("KertyForm.getDataSnapshot", () => {
-    it("should project the selected value when called", () => {
-        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
-
-        const snapshot = form.getDataSnapshot(data => data.username);
-
-        expect(snapshot()).toBe("bob");
-    });
-
-    it("should observe the latest data when the form changed after the selector was created", () => {
-        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
-        const snapshot = form.getDataSnapshot(data => data.username);
-
-        form.setFieldValue("username", "alice");
-
-        expect(snapshot()).toBe("alice");
-    });
-});
-
-describe("KertyForm.getStateSnapshot", () => {
-    it("should project the selected state value when called", () => {
-        const form = new KertyForm<any>({ data: { a: 1 } });
-        register(form, "a");
-        const snapshot = form.getStateSnapshot(state => state.isDirty);
-
-        form.setFieldValue("a", 2);
-
-        expect(snapshot()).toBe(true);
-    });
-});
-
 describe("KertyForm.getFieldSnapshot", () => {
     it("should return the same object on consecutive calls when nothing changed", () => {
         const form = new KertyForm<any>({ data: { a: 1 } });
