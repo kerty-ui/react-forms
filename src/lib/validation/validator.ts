@@ -1,4 +1,5 @@
 ﻿import { ValidationResult } from "./validationResult";
+import { getFieldPath } from "../utils/getFieldPath";
 import type {
     IValidationResult,
     MessageSeverity,
@@ -73,133 +74,183 @@ export const defaultValidatorOptions = {
     addMessageWhenCheckIs: true,
 } as Required<ValidatorOptions>;
 
+type CompiledRules<TData> = {
+    validations: IValidation<TData, any>[];
+    runsForAnyChange: boolean;
+};
+
+type CompiledEntry<TData> = {
+    propName: string;
+    rules?: CompiledRules<TData>;
+    node?: CompiledNode<TData>;
+};
+
+type CompiledNode<TData> = {
+    isArray: boolean;
+    entries: CompiledEntry<TData>[];
+    hasAnyChangeRules: boolean;
+};
+
+type ValidationFrame<TData> = {
+    ctx: ValidationContext<TData, any>;
+    node: CompiledNode<TData>;
+    matchedParts: number;
+};
+
+const OFF_PATH = -1;
+
+function compileEntry<TData>(propName: string, value: RawValidationsSchemaValue): CompiledEntry<TData> {
+    if (value instanceof FieldValidations) {
+        return {
+            propName,
+            rules: {
+                validations: [...value.validations],
+                runsForAnyChange: value.hasDependency || value.hasCondition,
+            },
+        };
+    }
+
+    return { propName, node: compileNode<TData>(value) };
+}
+
+function compileNode<TData>(schema: RawValidationsSchema | RawValidationsSchemaArray): CompiledNode<TData> {
+    const entries: CompiledEntry<TData>[] = [];
+
+    if (Array.isArray(schema)) {
+        for (const item of schema) {
+            if (item != null) {
+                entries.push(compileEntry<TData>("", item));
+            }
+        }
+    }
+    else {
+        for (const name in schema) {
+            const value = schema[name];
+            if (value != null) {
+                entries.push(compileEntry<TData>(name.startsWith("_") ? name.slice(1) : name, value));
+            }
+        }
+    }
+
+    return {
+        isArray: Array.isArray(schema),
+        entries,
+        hasAnyChangeRules: entries.some(entry => entry.rules?.runsForAnyChange || entry.node?.hasAnyChangeRules),
+    };
+}
+
+/**
+ * Validates form data against a {@link ValidationsSchema}. The schema is
+ * compiled and copied at construction, so later changes to it or to its
+ * {@link FieldValidations} don't affect the validator.
+ */
 export class Validator<TData = any> implements IValidator<TData> {
 
-    readonly #validations: RawValidationsSchema;
+    readonly #root: CompiledNode<TData>;
     readonly #addMessageIfCheckIsTrue: boolean;
 
     constructor(validations: ValidationsSchema<NoInfer<TData>>, options?: ValidatorOptions) {
-        this.#validations = validations as RawValidationsSchema;
+        this.#root = compileNode<TData>(validations as RawValidationsSchema);
         this.#addMessageIfCheckIsTrue = options?.addMessageWhenCheckIs ?? defaultValidatorOptions.addMessageWhenCheckIs;
     }
 
-    mode: ValidatorMode = "fieldDriven";
+    readonly mode: ValidatorMode = "fieldDriven";
 
     validate (ctx: ValidatorContext<TData>): Map<string, IValidationResult> {
 
         const validationsResult = new Map<string, ValidationResult>();
 
-        this.#validateInternal(
-            ctx.fieldName != null
-                ? ctx.fieldName.replace(/\[.*?]/g, '[]')
-                : undefined,
-            ctx.fieldName,
-            ctx.ruleSet,
-            {
+        // Each frame tracks how many parts of the changed field's path it has matched.
+        // Matching all of them means the frame is the changed field or inside it;
+        // OFF_PATH means it is unrelated, so only rules that run for any change are visited.
+        // Comparing path parts instead of field names also keeps the concatenated names
+        // from being flattened by V8 on every visited field.
+        const changedPath = ctx.fieldName != null
+            ? getFieldPath(ctx.fieldName)
+            : [];
+        const recordEmptyResults = ctx.fieldName != null;
+
+        const stack: ValidationFrame<TData>[] = [{
+            ctx: {
                 data: ctx.data,
                 parent: undefined,
                 value: ctx.data,
                 fieldName: "",
             },
-            this.#validations,
-            validationsResult
-        );
-
-        return validationsResult;
-    }
-
-    #validateInternal (
-        changedFieldPattern: string | undefined,
-        changedFieldName: string | null | undefined,
-        ruleSet: string | null | undefined,
-        rootCtx: ValidationContext<TData, any>,
-        rootValidations: RawValidationsSchema | RawValidationsSchemaArray,
-        validationsResult: Map<string, ValidationResult>
-    ) {
-
-        const isFullDataValidation = changedFieldName == null;
-
-        const stack: Array<{
-            ctx: ValidationContext<TData, any>;
-            pattern: string;
-            validations: RawValidationsSchema | RawValidationsSchemaArray;
-        }> = [{ ctx: rootCtx, pattern: "", validations: rootValidations }];
+            node: this.#root,
+            matchedParts: 0,
+        }];
 
         while (stack.length > 0) {
-            const { ctx, pattern, validations } = stack.pop()!;
+            const { ctx: nodeCtx, node, matchedParts } = stack.pop()!;
 
-            if (validations == null) {
-                continue;
-            }
+            if (node.isArray) {
 
-            if (Array.isArray(validations)) {
+                const items = nodeCtx.value as any[];
 
-                if (!Array.isArray(ctx.value)) {
-                    continue;
-                }
+                const onPathIndex = matchedParts !== OFF_PATH
+                    && matchedParts < changedPath.length
+                    && changedPath[matchedParts].isArrayItem
+                    ? Number(changedPath[matchedParts].name)
+                    : -1;
 
-                const itemPattern = `${pattern}[]`;
-                for(let vIndex = 0; vIndex < validations.length; vIndex++) {
-                    const childValidation = validations[vIndex];
-                    if(childValidation instanceof FieldValidations)
-                    {
-                        const runsForAnyChange = isFullDataValidation
-                            || childValidation.hasDependency
-                            || childValidation.hasCondition;
+                for (const entry of node.entries) {
 
-                        if(runsForAnyChange || changedFieldPattern === itemPattern) {
+                    const runsForAnyChange = entry.rules != null
+                        ? entry.rules.runsForAnyChange
+                        : entry.node!.hasAnyChangeRules;
 
-                            for (let index = 0; index < ctx.value.length; index++) {
+                    const visitsAllItems = matchedParts === changedPath.length || runsForAnyChange;
 
-                                const itemFieldName = `${ctx.fieldName}[${index}]`;
+                    if (!visitsAllItems && (onPathIndex < 0 || onPathIndex >= items.length)) {
+                        continue;
+                    }
 
-                                if(!runsForAnyChange && !itemFieldName.startsWith(changedFieldName)) {
-                                    continue;
-                                }
+                    const firstIndex = visitsAllItems ? 0 : onPathIndex;
+                    const lastIndex = visitsAllItems ? items.length - 1 : onPathIndex;
 
-                                const itemValidationContext = {
-                                    data: ctx.data,
-                                    parent: ctx.parent,
-                                    value: ctx.value[index],
-                                    fieldName: itemFieldName,
-                                } as ValidationContext<TData, any>;
-                                const itemValidationResult = this.#runValidations(ruleSet, itemValidationContext, childValidation.validations);
-                                if(itemValidationResult.messages.length > 0 || changedFieldPattern != null) {
-                                    validationsResult.set(itemFieldName, itemValidationResult);
-                                }
+                    if (entry.rules != null) {
+                        if (visitsAllItems || matchedParts + 1 === changedPath.length) {
+                            for (let index = firstIndex; index <= lastIndex; index++) {
+                                this.#validateField(
+                                    ctx.ruleSet,
+                                    {
+                                        data: nodeCtx.data,
+                                        parent: nodeCtx.parent,
+                                        value: items[index],
+                                        fieldName: `${nodeCtx.fieldName}[${index}]`,
+                                    },
+                                    entry.rules,
+                                    recordEmptyResults,
+                                    validationsResult);
                             }
                         }
 
                         continue;
                     }
 
-                    if (Array.isArray(childValidation)) {
-                        for (let index = 0; index < ctx.value.length; index++) {
-                            stack.push({
-                                ctx: {
-                                    data: ctx.data,
-                                    parent: ctx.parent,
-                                    value: ctx.value[index],
-                                    fieldName: `${ctx.fieldName}[${index}]`,
-                                },
-                                pattern: itemPattern,
-                                validations: childValidation,
-                            });
+                    const childNode = entry.node!;
+
+                    for (let index = lastIndex; index >= firstIndex; index--) {
+                        const value = items[index];
+
+                        if (childNode.isArray && !Array.isArray(value)) {
+                            continue;
                         }
 
-                        continue;
-                    }
+                        const itemFieldName = `${nodeCtx.fieldName}[${index}]`;
 
-                    for (let index = ctx.value.length - 1; index >= 0; index--) {
                         stack.push({
                             ctx: {
-                                data: ctx.data,
-                                parent: ctx.parent,
-                                value: ctx.value[index],
-                                fieldName: `${ctx.fieldName}[${index}].`,
+                                data: nodeCtx.data,
+                                parent: nodeCtx.parent,
+                                value,
+                                fieldName: childNode.isArray ? itemFieldName : itemFieldName + ".",
                             },
-                            pattern: `${itemPattern}.`,
-                            validations: childValidation,
+                            node: childNode,
+                            matchedParts: matchedParts === changedPath.length
+                                ? matchedParts
+                                : index === onPathIndex ? matchedParts + 1 : OFF_PATH,
                         });
                     }
                 }
@@ -207,58 +258,69 @@ export class Validator<TData = any> implements IValidator<TData> {
                 continue;
             }
 
-            for (const name in validations) {
-                const validation = validations[name];
+            for (const entry of node.entries) {
 
-                const propName = name.startsWith("_")
-                    ? name.slice(1)
-                    : name;
+                const entryMatchedParts = matchedParts === OFF_PATH || matchedParts === changedPath.length
+                    ? matchedParts
+                    : changedPath[matchedParts].name === entry.propName ? matchedParts + 1 : OFF_PATH;
 
-                const propValidationContext = {
-                    data: ctx.data,
-                    parent: ctx.value,
-                    value: ctx.value?.[propName],
-                    fieldName: ctx.fieldName + propName,
-                } as ValidationContext<TData, any>;
-
-                const propPattern = pattern + propName;
-
-                if (validation instanceof FieldValidations) {
-
-                    const runsForAnyChange = isFullDataValidation
-                        || validation.hasDependency
-                        || validation.hasCondition;
-
-                    const isTheChangedField = changedFieldName != null
-                        && propValidationContext.fieldName.startsWith(changedFieldName);
-
-                    if(runsForAnyChange || isTheChangedField) {
-                        const validationResult = this.#runValidations(ruleSet, propValidationContext, validation.validations);
-                        if(validationResult.messages.length > 0 || changedFieldPattern != null) {
-                            validationsResult.set(propValidationContext.fieldName, validationResult);
-                        }
+                if (entry.rules != null) {
+                    if (entryMatchedParts === changedPath.length || entry.rules.runsForAnyChange) {
+                        this.#validateField(
+                            ctx.ruleSet,
+                            {
+                                data: nodeCtx.data,
+                                parent: nodeCtx.value,
+                                value: nodeCtx.value?.[entry.propName],
+                                fieldName: nodeCtx.fieldName + entry.propName,
+                            },
+                            entry.rules,
+                            recordEmptyResults,
+                            validationsResult);
                     }
+
                     continue;
                 }
 
-                if (Array.isArray(validation) && Array.isArray(propValidationContext.value)) {
-                    stack.push({
-                        ctx: propValidationContext,
-                        pattern: propPattern,
-                        validations: validation,
-                    });
+                const childNode = entry.node!;
+
+                if (entryMatchedParts === OFF_PATH && !childNode.hasAnyChangeRules) {
+                    continue;
                 }
-                else {
-                    stack.push({
-                        ctx: {
-                            ...propValidationContext,
-                            fieldName: propValidationContext.fieldName + ".",
-                        },
-                        pattern: `${propPattern}.`,
-                        validations: validation,
-                    });
+
+                const value = nodeCtx.value?.[entry.propName];
+
+                if (childNode.isArray && !Array.isArray(value)) {
+                    continue;
                 }
+
+                stack.push({
+                    ctx: {
+                        data: nodeCtx.data,
+                        parent: nodeCtx.value,
+                        value,
+                        fieldName: childNode.isArray
+                            ? nodeCtx.fieldName + entry.propName
+                            : nodeCtx.fieldName + entry.propName + ".",
+                    },
+                    node: childNode,
+                    matchedParts: entryMatchedParts,
+                });
             }
+        }
+
+        return validationsResult;
+    }
+
+    #validateField(
+        ruleSet: string | null | undefined,
+        ctx: ValidationContext<TData, any>,
+        rules: CompiledRules<TData>,
+        recordEmptyResult: boolean,
+        validationsResult: Map<string, ValidationResult>) {
+        const result = this.#runValidations(ruleSet, ctx, rules.validations);
+        if (result.messages.length > 0 || recordEmptyResult) {
+            validationsResult.set(ctx.fieldName, result);
         }
     }
 

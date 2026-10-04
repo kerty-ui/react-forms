@@ -647,4 +647,153 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         expect(result.size).toBe(0);
     });
+
+    it("should skip a field whose name extends the changed field name when that field changes", () => {
+        const validator = new Validator<{ name: string; nameExtra: string }>({
+            _name: new FieldValidations(required("Name is required")),
+            _nameExtra: new FieldValidations(required("Name extra is required")),
+        });
+
+        const result = validator.validate({ data: { name: "", nameExtra: "" }, fieldName: "name" });
+
+        expect([...result.keys()]).toEqual(["name"]);
+    });
+
+    it("should skip an item field whose name extends the changed item field name when that field changes", () => {
+        const validator = new Validator<any>({
+            items: [{
+                _name: new FieldValidations(required("Name is required")),
+                _nameExtra: new FieldValidations(required("Name extra is required")),
+            }],
+        });
+
+        const result = validator.validate({
+            data: { items: [{ name: "", nameExtra: "" }] },
+            fieldName: "items[0].name",
+        });
+
+        expect([...result.keys()]).toEqual(["items[0].name"]);
+    });
+
+    it("should skip items whose index starts with the changed index when an array item changes", () => {
+        const validator = new Validator<any>({
+            items: [new FieldValidations(required("Item is required"))],
+        });
+
+        const result = validator.validate({
+            data: { items: Array.from({ length: 12 }, () => "") },
+            fieldName: "items[1]",
+        });
+
+        expect([...result.keys()]).toEqual(["items[1]"]);
+    });
+
+    it("should revalidate every item when the whole primitive array changes", () => {
+        const validator = new Validator<any>({
+            tags: [new FieldValidations(required("Tag is required"))],
+        });
+
+        const result = validator.validate({ data: { tags: ["", "b"] }, fieldName: "tags" });
+
+        expect([...result.keys()]).toEqual(["tags[0]", "tags[1]"]);
+    });
+
+    it("should revalidate every item when the object owning a primitive array changes", () => {
+        const validator = new Validator<any>({
+            post: { tags: [new FieldValidations(required("Tag is required"))] },
+        });
+
+        const result = validator.validate({ data: { post: { tags: ["", "b"] } }, fieldName: "post" });
+
+        expect([...result.keys()]).toEqual(["post.tags[0]", "post.tags[1]"]);
+    });
+
+    it("should revalidate only the inner items of the changed row when a nested array row changes", () => {
+        const validator = new Validator<any>({
+            matrix: [[new FieldValidations(required("Cell is required"))]],
+        });
+
+        const result = validator.validate({
+            data: { matrix: [["", "b"], ["", "d"]] },
+            fieldName: "matrix[1]",
+        });
+
+        expect([...result.keys()]).toEqual(["matrix[1][0]", "matrix[1][1]"]);
+    });
+
+    it("should revalidate a when rule in every item of another array when an unrelated field changes", () => {
+        const validator = new Validator<any>({
+            _title: new FieldValidations(required("Title is required")),
+            rows: [{
+                _name: new FieldValidations({
+                    when: () => true,
+                    check: (ctx: any) => Validations.IsTextEmpty(ctx.value),
+                    message: "Name is required",
+                }),
+            }],
+        });
+
+        const result = validator.validate({
+            data: { title: "", rows: [{ name: "" }, { name: "b" }] },
+            fieldName: "title",
+        });
+
+        expect([...result.keys()].sort()).toEqual(["rows[0].name", "rows[1].name", "title"]);
+    });
+
+    it("should revalidate only rules that run for any change when the changed index is outside the array", () => {
+        const validator = new Validator<any>({
+            _title: new FieldValidations({ check: () => true, message: "Title", hasDependency: true }),
+            items: [new FieldValidations(required("Item is required"))],
+        });
+
+        const result = validator.validate({ data: { title: "", items: ["", ""] }, fieldName: "items[5]" });
+
+        expect([...result.keys()]).toEqual(["title"]);
+    });
+
+    it("should skip the field rules when a path below that field changes", () => {
+        const validator = new Validator<any>({
+            _name: new FieldValidations(required("Name is required")),
+        });
+
+        const result = validator.validate({ data: { name: "" }, fieldName: "name.first" });
+
+        expect(result.size).toBe(0);
+    });
+});
+
+describe("Validator – schema captured at construction", () => {
+    it("should ignore a rule added to field validations when the validator is already constructed", () => {
+        const nameValidations = new FieldValidations(required("Name is required"));
+        const validator = new Validator<{ name: string }>({ _name: nameValidations });
+        nameValidations.add({ check: () => true, message: "Added later" });
+
+        const result = validator.validate({ data: { name: "" } });
+
+        expect(textsFor(result, "name")).toEqual(["Name is required"]);
+    });
+
+    it("should ignore a when condition added to field validations when the validator is already constructed", () => {
+        const surnameValidations = new FieldValidations(required("Surname is required"));
+        const validator = new Validator<{ name: string; surname: string }>({
+            _name: new FieldValidations(required("Name is required")),
+            _surname: surnameValidations,
+        });
+        surnameValidations.add({ when: () => true, check: () => false, message: "Added later" });
+
+        const result = validator.validate({ data: { name: "", surname: "" }, fieldName: "name" });
+
+        expect(result.has("surname")).toBe(false);
+    });
+
+    it("should ignore a field added to the schema when the validator is already constructed", () => {
+        const schema: any = { _name: new FieldValidations(required("Name is required")) };
+        const validator = new Validator<any>(schema);
+        schema._surname = new FieldValidations(required("Surname is required"));
+
+        const result = validator.validate({ data: { name: "", surname: "" } });
+
+        expect([...result.keys()]).toEqual(["name"]);
+    });
 });
