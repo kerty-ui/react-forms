@@ -1,5 +1,7 @@
 ﻿export { defaultFormConfig, KertyForm } from "./kertyForm";
 export { formContext, FormProvider, useFormContext } from "./contextProvider";
+export { deepEqual } from "./utils/isEqual";
+export { shallowEqual } from "./utils/shallowEqual";
 
 export * from "./components/formField";
 export * from "./components/formArrayField";

@@ -33,6 +33,8 @@ export const isEqual = (valueA: any, valueB: any, treatNullAsDefault?: boolean, 
     return _isEqual(valueA, valueB, compared);
 };
 
+export const deepEqual = (valueA: unknown, valueB: unknown): boolean => _isEqual(valueA, valueB, undefined);
+
 const _isEqualNormalized = (a: any, b: any, compared: ComparedPairs | undefined): boolean => {
     if (a === b) {
         return true;

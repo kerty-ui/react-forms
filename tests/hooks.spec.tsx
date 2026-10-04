@@ -10,6 +10,7 @@ import {
     Severity,
     SingleMessageDrivenValidator,
     ValidationResult,
+    shallowEqual,
     useDataWatch,
     useField,
     useFieldState,
@@ -476,6 +477,59 @@ describe("useDataWatch", () => {
         expect(renderCountOf("watcher")).toBe(before);
     });
 
+    describe("isEqual", () => {
+        const Watcher = ({ f }: { f: IKertyForm<LoginForm> }) => {
+            const selected = useDataWatch(f, data => ({ username: data.username }), shallowEqual);
+            return <><span data-testid="username">{selected.username}</span><RenderCount testId="watcher" /></>;
+        };
+
+        it("should not re-render the subscriber when the selected object is equal", () => {
+            const form = new KertyForm<LoginForm>({ data: { username: "alice", password: "" } });
+            render(<Watcher f={form} />);
+            const before = renderCountOf("watcher");
+
+            act(() => form.setFieldValue("password", "pw"));
+
+            expect(renderCountOf("watcher")).toBe(before);
+        });
+
+        it("should re-render the subscriber with the new value when the selected object differs", () => {
+            const form = new KertyForm<LoginForm>({ data: { username: "alice", password: "" } });
+            render(<Watcher f={form} />);
+
+            act(() => form.setFieldValue("username", "bob"));
+
+            expect(screen.getByTestId("username").textContent).toBe("bob");
+        });
+
+        it("should return the same reference when re-rendered with a new inline selector and unchanged data", () => {
+            const form = new KertyForm<LoginForm>({ data: { username: "alice", password: "" } });
+            const results: unknown[] = [];
+            const Recorder = ({ f }: { f: IKertyForm<LoginForm> }) => {
+                results.push(useDataWatch(f, data => ({ username: data.username }), shallowEqual));
+                return null;
+            };
+            const { rerender } = render(<Recorder f={form} />);
+
+            rerender(<Recorder f={form} />);
+
+            expect(results.at(-1)).toBe(results[0]);
+        });
+
+        it("should return the value of the new selector when the selector changes and data is unchanged", () => {
+            const form = new KertyForm<LoginForm>({ data: { username: "alice", password: "secret" } });
+            const Picker = ({ f, field }: { f: IKertyForm<LoginForm>; field: keyof LoginForm }) => {
+                const selected = useDataWatch(f, data => ({ value: data[field] }), shallowEqual);
+                return <span data-testid="picked">{selected.value}</span>;
+            };
+            const { rerender } = render(<Picker f={form} field="username" />);
+
+            rerender(<Picker f={form} field="password" />);
+
+            expect(screen.getByTestId("picked").textContent).toBe("secret");
+        });
+    });
+
     describe("nested model", () => {
         type PersonForm = {
             person: {
@@ -584,6 +638,60 @@ describe("useStateWatch", () => {
         act(() => form.current.setFieldValue("a", 3));
 
         expect(renderCountOf("watcher")).toBe(before);
+    });
+
+    describe("isEqual", () => {
+        const Watcher = ({ f }: { f: IKertyForm<any> }) => {
+            const selected = useStateWatch(f, state => ({ isDirty: state.isDirty }), shallowEqual);
+            return <><span data-testid="dirty">{String(selected.isDirty)}</span><RenderCount testId="watcher" /></>;
+        };
+
+        it("should not re-render the subscriber when the selected object is equal", () => {
+            const form = new KertyForm<any>({ data: { a: 1 } });
+            render(<Watcher f={form} />);
+            const before = renderCountOf("watcher");
+
+            act(() => form.touch("a"));
+
+            expect(renderCountOf("watcher")).toBe(before);
+        });
+
+        it("should re-render the subscriber with the new value when the selected object differs", () => {
+            const form = new KertyForm<any>({ data: { a: 1 } });
+            render(<Watcher f={form} />);
+
+            act(() => form.setFieldValue("a", 2));
+
+            expect(screen.getByTestId("dirty").textContent).toBe("true");
+        });
+
+        it("should return the same reference when re-rendered with a new inline selector and unchanged state", () => {
+            const form = new KertyForm<any>({ data: { a: 1 } });
+            const results: unknown[] = [];
+            const Recorder = ({ f }: { f: IKertyForm<any> }) => {
+                results.push(useStateWatch(f, state => ({ isDirty: state.isDirty }), shallowEqual));
+                return null;
+            };
+            const { rerender } = render(<Recorder f={form} />);
+
+            rerender(<Recorder f={form} />);
+
+            expect(results.at(-1)).toBe(results[0]);
+        });
+
+        it("should return the value of the new selector when the selector changes and state is unchanged", () => {
+            const form = new KertyForm<any>({ data: { a: 1 } });
+            form.touch("a");
+            const Picker = ({ f, flag }: { f: IKertyForm<any>; flag: "isDirty" | "isTouched" }) => {
+                const selected = useStateWatch(f, state => ({ value: state[flag] }), shallowEqual);
+                return <span data-testid="picked">{String(selected.value)}</span>;
+            };
+            const { rerender } = render(<Picker f={form} flag="isDirty" />);
+
+            rerender(<Picker f={form} flag="isTouched" />);
+
+            expect(screen.getByTestId("picked").textContent).toBe("true");
+        });
     });
 });
 
