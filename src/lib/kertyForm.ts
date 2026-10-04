@@ -273,9 +273,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #listeners = new Set<FormListener>();
 
     constructor(options: FormOptions<TData>) {
-        this.#initialData = structuredClone(options.data ?? {} as TData);
+        this.#initialData = options.data ?? {} as TData;
         this.#data = this.#initialData;
-        this.#state = structuredClone(defaultFormState);
+        this.#state = {...defaultFormState};
         this.setValidator(typeof options.validator === "function" ? options.validator() : options.validator);
         this.updateConfiguration({ ...defaultFormConfig, ...options });
     }
@@ -610,7 +610,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         this.#lastValidation = undefined;
 
         if(data != null) {
-            this.#initialData = structuredClone(data);
+            this.#initialData = data;
         }
         this.#data = this.#initialData;
 

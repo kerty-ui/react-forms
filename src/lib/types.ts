@@ -256,6 +256,13 @@ export type FormConfig = {
 export type FieldListenerScope = "self" | "child" | "descendants";
 
 export type FormOptions<TData> = FormConfig & {
+    /**
+     * Initial form data. The form keeps this object without copying it and never
+     * mutates it: every change produces new objects along the changed path, which
+     * become plain objects. Field values such as class instances or functions are
+     * stored as they are. Don't mutate this object, or one read from the form,
+     * after passing it in.
+     */
     data?: TData;
     validator?: IValidator<TData> | (() => IValidator<TData>);
 }
@@ -366,5 +373,9 @@ export interface IKertyForm<TData> extends IFormValidation<TData>, IFormArrayAct
     removeFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath> | AutoFieldPath<TData, TPath>[], silent?: boolean): void;
     touch<TPath extends string>(name?: AutoFieldPath<TData, TPath>): void;
     touch<TValue>(name?: FieldPathByValue<TData, TValue>): void;
+    /**
+     * Restores the initial data and clears field and form state and validation results. When `data` is given,
+     * it becomes the new initial data, kept without copying as with {@link FormOptions.data}.
+     */
     reset(data?: TData): void;
 }

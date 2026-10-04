@@ -13,6 +13,15 @@ type ProfileForm = {
     };
 };
 
+class Money {
+    constructor(readonly amount: number) { }
+}
+
+type PriceForm = {
+    price: Money;
+    format: () => string;
+};
+
 const register = <T extends ObjectData>(form: KertyForm<T>, name: string) => form.addFieldListener(name as any, () => { });
 
 describe("KertyForm – construction", () => {
@@ -28,21 +37,28 @@ describe("KertyForm – construction", () => {
         expect(form.getData()).toEqual({ username: "bob", password: "pw" });
     });
 
-    it("should clone the given data when constructed so the caller's object is not shared", () => {
+    it("should keep the given data without copying when constructed", () => {
         const data = { username: "bob", password: "pw" };
+
         const form = new KertyForm<LoginForm>({ data });
 
-        expect(form.getData()).not.toBe(data);
+        expect(form.getData()).toBe(data);
     });
 
-    it("should keep the dirty baseline when the caller mutates the given data after construction", () => {
-        const data = { username: "bob", password: "pw" };
-        const form = new KertyForm<LoginForm>({ data });
-        data.username = "alice";
+    it("should keep a class instance field value when constructed", () => {
+        const price = new Money(5);
 
-        form.setFieldValue("username", "alice");
+        const form = new KertyForm<PriceForm>({ data: { price, format: () => "" } });
 
-        expect(form.getFieldState("username").isDirty).toBe(true);
+        expect(form.getFieldValue("price")).toBe(price);
+    });
+
+    it("should keep a function field value when constructed", () => {
+        const format = () => "";
+
+        const form = new KertyForm<PriceForm>({ data: { price: new Money(5), format } });
+
+        expect(form.getFieldValue("format")).toBe(format);
     });
 
     it("should start in a pristine state when constructed", () => {
@@ -1088,15 +1104,13 @@ describe("KertyForm.reset", () => {
         expect(form.getState().isDirty).toBe(false);
     });
 
-    it("should keep the dirty baseline when the caller mutates the object passed to reset", () => {
-        const form = new KertyForm<any>({ data: { a: 1 } });
-        const data = { a: 9 };
-        form.reset(data);
-        data.a = 5;
+    it("should keep a class instance field value when called with new data", () => {
+        const form = new KertyForm<PriceForm>({ data: { price: new Money(5), format: () => "" } });
+        const price = new Money(9);
 
-        form.setFieldValue("a", 5);
+        form.reset({ price, format: () => "" });
 
-        expect(form.getFieldState("a").isDirty).toBe(true);
+        expect(form.getFieldValue("price")).toBe(price);
     });
 
     it("should notify every listener when called", () => {
