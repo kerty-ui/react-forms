@@ -795,6 +795,54 @@ describe("KertyForm.removeFieldValue on an array item path", () => {
     });
 });
 
+describe("KertyForm.removeFieldValue with several names that point into the same array", () => {
+    it("should remove both named items when two item paths are given in ascending order", () => {
+        const form = listForm(["a", "b", "c"]);
+
+        form.removeFieldValue(["items[0]", "items[1]"]);
+
+        expect(form.getData().items).toEqual(["c"]);
+    });
+
+    it("should remove the field of the named item when an earlier item is removed in the same call", () => {
+        const form = new KertyForm<PersonsForm>({
+            data: {
+                persons: [
+                    { name: "Ann", surname: "A", phoneNumbers: [] },
+                    { name: "Bob", surname: "B", phoneNumbers: [] },
+                    { name: "Cid", surname: "C", phoneNumbers: [] },
+                ],
+            },
+        });
+
+        form.removeFieldValue(["persons[0]", "persons[1].surname"]);
+
+        expect(form.getData().persons).toEqual([
+            { name: "Bob", phoneNumbers: [] },
+            { name: "Cid", surname: "C", phoneNumbers: [] },
+        ]);
+    });
+
+    it("should keep the next item intact when an item and its own field are removed in the same call", () => {
+        const form = new KertyForm<PersonsForm>({
+            data: {
+                persons: [
+                    { name: "Ann", surname: "A", phoneNumbers: [] },
+                    { name: "Bob", surname: "B", phoneNumbers: [] },
+                    { name: "Cid", surname: "C", phoneNumbers: [] },
+                ],
+            },
+        });
+
+        form.removeFieldValue(["persons[1]", "persons[1].surname"]);
+
+        expect(form.getData().persons).toEqual([
+            { name: "Ann", surname: "A", phoneNumbers: [] },
+            { name: "Cid", surname: "C", phoneNumbers: [] },
+        ]);
+    });
+});
+
 describe("KertyForm.removeItems – moving item field states when the first item is removed", () => {
     it.each([
         ["persons[1]", "persons[0]"],

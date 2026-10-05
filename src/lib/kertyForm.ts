@@ -65,6 +65,8 @@ type MovedItems = {
     extraIndex?: number;
 };
 
+const ITEMS_HAVE_CHILD_NODES = Symbol();
+
 // Returns itself for any property, so a moved item and all of its children differ from any real value.
 const MOVED_ITEM: any = new Proxy({}, { get: () => MOVED_ITEM });
 
@@ -128,11 +130,17 @@ class FieldInfo implements IFieldInfo {
 
     name: string;
     path: FieldPathPart[];
+    arraysWithItemChildNodes: number[] = [];
     listenerCount: number = 0;
 
     constructor(name: string) {
         this.name = name;
         this.path = getFieldPath(name, true);
+        for(let i = 0; i < this.path.length - 2; i++) {
+            if(this.path[i].isArray && (this.path[i + 1].isArray || i + 3 < this.path.length)) {
+                this.arraysWithItemChildNodes.push(i);
+            }
+        }
     }
 }
 
@@ -361,7 +369,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     addFieldListener<TPath extends string>(name: AutoFieldPath<TData, TPath>, listener: () => void, scope?: FieldListenerScope) {
 
         const field = this.#getField(name as string);
-        this.#getFieldEntry(field.path);
+        const subscribedEntry = this.#getFieldEntry(field);
 
         field.listenerCount += 1;
         if(field.listenerCount === 1) {
@@ -378,7 +386,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         } as FormListener;
         this.#listeners.add(entry);
 
-        if(this.#state.isValidated && field.listenerCount === 1) {
+        if(this.#state.isValidated
+            && field.listenerCount === 1
+            && (!this.#isMessageDrivenValidator || !this.#keepValidationResultsWithoutListeners)) {
 
             const listenerOptions = new NotifyListenerOptions();
 
@@ -403,8 +413,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             if(field.listenerCount === 0) {
                 this.#listenedFieldCount -= 1;
 
-                const fieldEntry = this.#getFieldEntry(field.path, false);
-                if(fieldEntry === undefined) {
+                const fieldEntry = this.#getFieldEntry(field, false);
+                if(fieldEntry !== subscribedEntry) {
                     return;
                 }
 
@@ -417,6 +427,10 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                     }
                 }
                 else {
+                    if(fieldEntry.validationResult != null || fieldEntry.state.isValidated || !fieldEntry.state.isValid) {
+                        this.#lastValidation = undefined;
+                    }
+
                     fieldEntry.validationResult = undefined;
                     this.#setFieldState(fieldEntry, {
                         ...fieldEntry.state,
@@ -492,7 +506,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         return () => {
 
-            const entry = this.#getFieldEntry(field.path, false);
+            const entry = this.#getFieldEntry(field, false);
             const currentFieldState = entry?.state ?? this.#getEntrylessFieldState(field.path);
             const currentFieldValidationResult = entry?.validationResult;
 
@@ -522,8 +536,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     getFieldState<TPath extends string>(name: AutoFieldPath<TData, TPath>): FieldState {
-        const path = this.#getField(name as string).path;
-        return this.#getFieldEntry(path, false)?.state ?? this.#getEntrylessFieldState(path);
+        const field = this.#getField(name as string);
+        return this.#getFieldEntry(field, false)?.state ?? this.#getEntrylessFieldState(field.path);
     }
 
     setFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath>, value: FieldPathValue<TData, TPath> | null | undefined, silent?: boolean): void;
@@ -546,9 +560,23 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     removeFieldValue<TPath extends string>(name: AutoFieldPath<TData, TPath> | AutoFieldPath<TData, TPath>[], silent: boolean = false) {
-        const fieldNames = Array.isArray(name) ? name : [name];
-        for(const fieldName of fieldNames) {
-            const field = this.#getField(fieldName as string);
+        const fields = Array.isArray(name)
+            ? [...new Set(name)].map(fieldName => this.#getField(fieldName as string)).sort((a, b) => {
+                const length = Math.min(a.path.length, b.path.length);
+                for(let i = 0; i < length; i++) {
+                    const aPart = a.path[i];
+                    const bPart = b.path[i];
+                    if(aPart.name !== bPart.name) {
+                        if(aPart.isArrayItem && bPart.isArrayItem) {
+                            return +bPart.name - +aPart.name;
+                        }
+                        return aPart.name < bPart.name ? 1 : -1;
+                    }
+                }
+                return b.path.length - a.path.length;
+            })
+            : [this.#getField(name as string)];
+        for(const field of fields) {
             const path = field.path;
             const lastPart = path[path.length - 1];
             if(lastPart.isArrayItem) {
@@ -572,13 +600,30 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         if(name != null) {
             const field = this.#getField(name);
-            const entry = this.#getFieldEntry(field.path);
+            const entry = this.#getFieldEntry(field);
             if(!entry.state.isTouched) {
                 this.#setFieldState(entry, {
                     ...entry.state,
                     isTouched: true,
                 });
                 listenerOptions.addAffectedField(name as string);
+            }
+        }
+        else {
+            let isAnyFieldTouched = false;
+            this.#processEntries(this.#fieldEntries, (entry) => {
+                if(entry.state.isTouched) {
+                    return;
+                }
+
+                this.#setFieldState(entry, {
+                    ...entry.state,
+                    isTouched: true,
+                });
+                isAnyFieldTouched = true;
+            });
+            if(isAnyFieldTouched) {
+                listenerOptions.allFieldsAffected();
             }
         }
 
@@ -647,7 +692,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             listenerOptions.formValidationChanged();
         }
 
-        this.#resetEntriesValidation(listenerOptions, false);
+        this.#clearEntriesValidation(listenerOptions, true);
 
         const invalidFields = new Set<string>();
 
@@ -672,7 +717,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 }
 
                 const field = this.#getField(fieldName);
-                const entry = this.#getFieldEntry(field.path);
+                const entry = this.#getFieldEntry(field);
 
                 if(validationResult.messages.length > 0) {
                     entry.validationResult = validationResult;
@@ -741,7 +786,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 listenerOptions.formValidationChanged();
             }
 
-            this.#resetEntriesValidation(listenerOptions, true);
+            this.#clearEntriesValidation(listenerOptions, true);
         }
         else if(validationResults.size === 0) {
             return;
@@ -749,10 +794,12 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         for(let [fieldName, validationResult] of validationResults) {
 
+            const validationResultIsEmpty = validationResult.messages.length === 0;
+
             if(fieldName == null || fieldName === "") {
                 const formValidationResult = new ValidationResult();
                 if(mode === "merge") {
-                    if(validationResult.messages.length === 0) {
+                    if(validationResultIsEmpty) {
                         continue;
                     }
                     formValidationResult.merge(this.#validationResult);
@@ -770,20 +817,17 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 continue;
             }
 
-            const entry = this.#getFieldEntry(this.#getField(fieldName).path, !ignoreUnknownFields);
+            if(validationResultIsEmpty && mode === "merge") {
+                continue;
+            }
+
+            const entry = this.#getFieldEntry(this.#getField(fieldName), !ignoreUnknownFields);
 
             if(entry == null) {
                 continue;
             }
 
-            const fieldValidationResult = new ValidationResult();
-            if(mode === "merge") {
-                fieldValidationResult.merge(entry.validationResult);
-            }
-
-            fieldValidationResult.merge(validationResult);
-
-            if(validationResult.messages.length === 0) {
+            if(validationResultIsEmpty) {
                 if(entry.validationResult == null && entry.state.isValid) {
                     continue;
                 }
@@ -798,6 +842,12 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 listenerOptions.addAffectedField(fieldName);
             }
             else {
+                const fieldValidationResult = new ValidationResult();
+                if(mode === "merge") {
+                    fieldValidationResult.merge(entry.validationResult);
+                }
+                fieldValidationResult.merge(validationResult);
+
                 entry.validationResult = fieldValidationResult;
                 this.#setFieldState(entry, {
                     ...entry.state,
@@ -834,7 +884,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             listenerOptions.formValidationChanged();
         }
 
-        this.#resetEntriesValidation(listenerOptions, false);
+        this.#clearEntriesValidation(listenerOptions, false);
 
         const formIsValid = this.#isFormValid();
         if(this.#state.isValid !== formIsValid || this.#state.isValidated) {
@@ -858,8 +908,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         const fieldNames = Array.isArray(name) ? name : [name];
         for(const fieldName of fieldNames) {
             const field = this.#getField(fieldName);
-            const entry = this.#getFieldEntry(field.path);
-            if(entry.validationResult == null && entry.state.isValid && !entry.state.isValidated) {
+            const entry = this.#getFieldEntry(field, false);
+            if(entry == null || (entry.validationResult == null && entry.state.isValid && !entry.state.isValidated)) {
                 continue;
             }
 
@@ -889,7 +939,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         if(name == null) {
             return this.#validationResult;
         }
-        return this.#getFieldEntry(this.#getField(name as string).path, false)?.validationResult;
+        return this.#getFieldEntry(this.#getField(name as string), false)?.validationResult;
     }
 
     getValidationMessage<TPath extends string>(name?: AutoFieldPath<TData, TPath> | null) {
@@ -1153,20 +1203,34 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         return this.#invalidCount === 0 && (this.#validationResult == null || !this.#validationResult.has(Severity.Error));
     }
 
-    #addFieldEntry(path: FieldPathPart[]) {
-        const entry = new FieldEntry(path);
-        setObjectValue(this.#fieldEntries as any, path, entry, true);
+    #addFieldEntry(field: FieldInfo) {
+        const entry = new FieldEntry(field.path);
+        setObjectValue(this.#fieldEntries as any, field.path, entry, true);
+
+        const arrayIndexes = field.arraysWithItemChildNodes;
+        if(arrayIndexes.length > 0) {
+            let node: any = this.#fieldEntries;
+            let next = 0;
+            for(let i = 0; next < arrayIndexes.length; i++) {
+                node = node[field.path[i].name];
+                if(i === arrayIndexes[next]) {
+                    node[ITEMS_HAVE_CHILD_NODES] = true;
+                    next++;
+                }
+            }
+        }
+
         return entry;
     }
 
-    #getFieldEntry(path: FieldPathPart[]): FieldEntry;
-    #getFieldEntry(path: FieldPathPart[], initialize: true): FieldEntry;
-    #getFieldEntry(path: FieldPathPart[], initialize: boolean): FieldEntry | undefined;
-    #getFieldEntry(path: FieldPathPart[], initialize: boolean = true): FieldEntry | undefined {
-        let entry = getObjectValue<FieldEntry>(this.#fieldEntries as any, path, true);
+    #getFieldEntry(field: FieldInfo): FieldEntry;
+    #getFieldEntry(field: FieldInfo, initialize: true): FieldEntry;
+    #getFieldEntry(field: FieldInfo, initialize: boolean): FieldEntry | undefined;
+    #getFieldEntry(field: FieldInfo, initialize: boolean = true): FieldEntry | undefined {
+        let entry = getObjectValue<FieldEntry>(this.#fieldEntries as any, field.path, true);
         if(entry === undefined && initialize) {
-            entry = this.#addFieldEntry(path);
-            this.#setFieldState(entry, this.#getEntrylessFieldState(path));
+            entry = this.#addFieldEntry(field);
+            this.#setFieldState(entry, this.#getEntrylessFieldState(field.path));
         }
         return entry;
     }
@@ -1179,13 +1243,14 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             : defaultFieldState;
     }
 
-    #resetEntriesValidation(listenerOptions: NotifyListenerOptions, isValidated: boolean) {
-        if(this.#validatedCount === 0) {
+    #clearEntriesValidation(listenerOptions: NotifyListenerOptions, isValidated: boolean) {
+        if(!isValidated && this.#validatedCount === 0) {
             return;
         }
 
+        let isAnyFieldChanged = false;
         this.#processEntries(this.#fieldEntries, (entry) => {
-            if(entry.validationResult == null && entry.state.isValid && !entry.state.isValidated) {
+            if(entry.validationResult == null && entry.state.isValid && entry.state.isValidated === isValidated) {
                 return;
             }
 
@@ -1195,10 +1260,13 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 isValid: true,
                 isValidated,
             });
+            isAnyFieldChanged = true;
         });
 
-        listenerOptions.formValidationChanged();
-        listenerOptions.allFieldsAffected();
+        if(isAnyFieldChanged) {
+            listenerOptions.formValidationChanged();
+            listenerOptions.allFieldsAffected();
+        }
     }
 
     #insertItemEntries(field: FieldInfo, start: number, count: number, length: number) {
@@ -1352,13 +1420,14 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             }
 
             const field = this.#getField(fieldName);
-            const entry = this.#getFieldEntry(field.path);
-            if(validationResult.messages.length > 0) {
-                entry.validationResult = validationResult;
+            const entry = this.#getFieldEntry(field);
+            const hasMessages = validationResult.messages.length > 0;
+
+            if(!hasMessages && entry.validationResult == null && entry.state.isValidated && entry.state.isValid) {
+                continue;
             }
-            else if(entry.validationResult != null) {
-                entry.validationResult = undefined;
-            }
+
+            entry.validationResult = hasMessages ? validationResult : undefined;
 
             this.#setFieldState(entry, {
                 ...entry.state,
@@ -1386,7 +1455,62 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
 
         // A missing entry is added clean so the dirty check below sees the change and propagates it to ancestors.
-        const entry = this.#getFieldEntry(field.path, false) ?? this.#addFieldEntry(field.path);
+        const entry = this.#getFieldEntry(field, false) ?? this.#addFieldEntry(field);
+        const descendantsNode = getObjectValue<object>(this.#fieldEntries as any, field.path);
+
+        if(descendantsNode != null && movedItems === undefined) {
+            const nodes: any[] = [descendantsNode];
+            const values: any[] = [value];
+            const previousValues: any[] = [getObjectValue(previousData, field.path)];
+
+            while(nodes.length > 0) {
+                const node = nodes.pop();
+                const nodeValue = values.pop();
+                const previousNodeValue = previousValues.pop();
+
+                if(Array.isArray(node)) {
+                    const length = Array.isArray(nodeValue) ? nodeValue.length : 0;
+                    if(node.length > length) {
+                        for(const trimmedNode of node.splice(length)) {
+                            if(trimmedNode != null) {
+                                this.#resetFieldStates(trimmedNode);
+                            }
+                        }
+                    }
+
+                    if((node as any)[ITEMS_HAVE_CHILD_NODES] !== true) {
+                        continue;
+                    }
+
+                    for(let i = 0; i < node.length; i++) {
+                        const itemNode = node[i];
+                        const itemValue = nodeValue[i];
+                        const previousItemValue = previousNodeValue?.[i];
+                        if(itemNode != null && itemValue !== previousItemValue) {
+                            nodes.push(itemNode);
+                            values.push(itemValue);
+                            previousValues.push(previousItemValue);
+                        }
+                    }
+                    continue;
+                }
+
+                for(const key in node) {
+                    const child = node[key];
+                    if(child == null || child instanceof FieldEntry) {
+                        continue;
+                    }
+
+                    const childValue = nodeValue?.[key];
+                    const previousChildValue = previousNodeValue?.[key];
+                    if(childValue !== previousChildValue) {
+                        nodes.push(child);
+                        values.push(childValue);
+                        previousValues.push(previousChildValue);
+                    }
+                }
+            }
+        }
 
         if(this.#dirtyCheckEnabled) {
             if(this.#setFieldDirty(entry, this.#isValueDirty(value, getObjectValue(this.#initialData, field.path)))) {
@@ -1408,7 +1532,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 }
             }
 
-            this.#checkDescendantsAreDirty(field, entry, previousData, movedItems);
+            this.#checkDescendantsAreDirty(field, entry, descendantsNode, previousData, movedItems);
         }
 
         if(!silent && this.#trackTouchOnValueChange) {
@@ -1450,12 +1574,12 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                             listenerOptions.allFieldsAffected();
                         }
                     }
-                } else if(!entry.state.isValid) {
+                } else if(entry.validationResult != null || !entry.state.isValid) {
+                    entry.validationResult = undefined;
                     this.#setFieldState(entry, {
                         ...entry.state,
                         isValid: true,
                     });
-                    entry.validationResult = undefined;
                 }
 
                 this.#validateField(field.name, listenerOptions);
@@ -1498,8 +1622,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    #checkDescendantsAreDirty(field: FieldInfo, entry: FieldEntry, previousData: TData, movedItems: MovedItems | undefined) {
-        const descendantsNode = getObjectValue<object>(this.#fieldEntries as any, field.path);
+    #checkDescendantsAreDirty(field: FieldInfo, entry: FieldEntry, descendantsNode: object | undefined, previousData: TData, movedItems: MovedItems | undefined) {
         if(descendantsNode == null) {
             return;
         }

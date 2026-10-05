@@ -1,4 +1,4 @@
-﻿import { type FieldPathByValue, type IKertyForm, useDataWatch, useField, useForm } from "@kerty-ui/react-forms";
+﻿import { type AutoFieldPath, type IKertyForm, useDataWatch, useField, useForm } from "@kerty-ui/react-forms";
 import { Button } from "../../../components/button.tsx";
 import { ExampleBlock } from "../../../components/example-block.tsx";
 import { RenderCount } from "../../../components/render-count.tsx";
@@ -6,7 +6,7 @@ import type { LoginForm } from "../../../types";
 
 const codeExample = `
 
-import { useDataWatch, useField, useForm, type FieldPathByValue, type IKertyForm } from "@kerty-ui/react-forms";
+import { useDataWatch, useField, useForm, type AutoFieldPath, type IKertyForm } from "@kerty-ui/react-forms";
 import { RenderCount } from "./renderCount";
 
 type LoginForm = {
@@ -39,14 +39,14 @@ const KertyBasicFormComponentsExample = () => {
     )
 }
 
-const TextField = <TData, TName extends FieldPathByValue<TData, string>,>(props: {
+const TextField = <TData, TPath extends string,>(props: {
     form: IKertyForm<TData>,
-    name: TName,
+    name: AutoFieldPath<TData, TPath, string>,
     label: string,
     placeholder?: string;
     type?: "text" | "password";
 }) => {
-    const field = useField<string>(props.form, props.name);
+    const [field] = useField<any, string>({ form: props.form, name: props.name });
     return (
         <div className="field">
             <label>{props.label} <RenderCount /></label>
@@ -54,7 +54,7 @@ const TextField = <TData, TName extends FieldPathByValue<TData, string>,>(props:
                 type={props.type ?? "text"}
                 placeholder={props.placeholder}
                 value={field.value ?? ""}
-                onChange={(e) => props.form.setFieldValue(props.name, e.target.value)}
+                onChange={(e) => field.setValue(e.target.value)}
             />
         </div>
     );
@@ -109,14 +109,14 @@ export const KertyFormCustomComponentsExample = () => {
     );
 }
 
-const TextField = <TData, TName extends FieldPathByValue<TData, string>,>(props: {
+const TextField = <TData, TPath extends string,>(props: {
     form: IKertyForm<TData>,
-    name: TName,
+    name: AutoFieldPath<TData, TPath, string>,
     label: string,
     placeholder?: string;
     type?: "text" | "password";
 }) => {
-    const field = useField<string>(props.form, props.name);
+    const [field] = useField<any, string>({ form: props.form, name: props.name });
     return (
         <div className="field">
             <label>{props.label} <RenderCount /></label>
@@ -124,7 +124,7 @@ const TextField = <TData, TName extends FieldPathByValue<TData, string>,>(props:
                 type={props.type ?? "text"}
                 placeholder={props.placeholder}
                 value={field.value ?? ""}
-                onChange={(e) => props.form.setFieldValue(props.name, e.target.value)}
+                onChange={(e) => field.setValue(e.target.value)}
             />
         </div>
     );

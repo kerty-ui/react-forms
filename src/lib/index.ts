@@ -2,6 +2,7 @@
 export { formContext, FormProvider, useFormContext } from "./contextProvider";
 export { deepEqual } from "./utils/isEqual";
 export { shallowEqual } from "./utils/shallowEqual";
+export { INTERNAL_NAME_PREFIX, setInternalNamePrefix } from "./utils/getFieldPath";
 
 export * from "./components/formField";
 export * from "./components/formArrayField";

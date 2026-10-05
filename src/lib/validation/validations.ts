@@ -52,9 +52,26 @@ export class Validations
         if (value == null || value.length === 0) return true;
         for (let i = 0; i < value.length; i++) {
             const c = value.charCodeAt(i);
-            // space, tab, newline, carriage return, form feed, vertical tab,
-            // non-breaking space, and Unicode whitespace range
-            if (c !== 32 && c !== 9 && c !== 10 && c !== 13 && c !== 12 && c !== 11 && c !== 160 && (c < 8192 || c > 8202)) {
+            // 32 = space; 9–13 = tab, line feed, vertical tab, form feed, carriage return
+            if (c === 32 || (c >= 9 && c <= 13)) {
+                continue;
+            }
+            // Below 160 (U+00A0) no other character is whitespace, so plain text exits here
+            if (c < 160) {
+                return false;
+            }
+            // The rest of JavaScript's whitespace set (the characters String.prototype.trim removes):
+            // 160 = U+00A0 no-break space
+            // 5760 = U+1680 ogham space mark
+            // 8192–8202 = U+2000–U+200A en quad through hair space
+            // 8232 = U+2028 line separator
+            // 8233 = U+2029 paragraph separator
+            // 8239 = U+202F narrow no-break space
+            // 8287 = U+205F medium mathematical space
+            // 12288 = U+3000 ideographic space
+            // 65279 = U+FEFF zero width no-break space (byte order mark)
+            if (c !== 160 && c !== 5760 && (c < 8192 || c > 8202) && c !== 8232 && c !== 8233
+                && c !== 8239 && c !== 8287 && c !== 12288 && c !== 65279) {
                 return false;
             }
         }

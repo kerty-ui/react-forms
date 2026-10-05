@@ -128,6 +128,79 @@ describe("Validator.validate – full form", () => {
     });
 });
 
+describe("Validator – parent context chain", () => {
+    const capturedContext = (schema: any, data: any) => {
+        let captured: any;
+        const capture = new FieldValidations({ check: (ctx: any) => { captured = ctx; return false; }, message: "never" });
+        new Validator<any>(schema(capture)).validate({ data });
+        return captured;
+    };
+
+    const ancestorValues = (ctx: any) => {
+        const values: any[] = [];
+        for(let parentContext = ctx.parentContext; parentContext != null; parentContext = parentContext.parentContext) {
+            values.push(parentContext.value);
+        }
+        return values;
+    };
+
+    it("should end the chain at the form data when the field is at the root", () => {
+        const data = { name: "John" };
+
+        const ctx = capturedContext((rule: any) => ({ _name: rule }), data);
+
+        expect(ancestorValues(ctx)).toEqual([data]);
+    });
+
+    it("should chain the owning object and the form data when the field is nested", () => {
+        const data = { person: { name: "John" } };
+
+        const ctx = capturedContext((rule: any) => ({ person: { _name: rule } }), data);
+
+        expect(ancestorValues(ctx)).toEqual([data.person, data]);
+    });
+
+    it("should chain the array and its owner when the field is an array item", () => {
+        const data = { tags: ["a"] };
+
+        const ctx = capturedContext((rule: any) => ({ tags: [rule] }), data);
+
+        expect(ancestorValues(ctx)).toEqual([data.tags, data]);
+    });
+
+    it("should keep the owner of the array as parent when the field is an array item", () => {
+        const data = { tags: ["a"] };
+
+        const ctx = capturedContext((rule: any) => ({ tags: [rule] }), data);
+
+        expect(ctx.parent).toBe(data);
+    });
+
+    it("should chain the item, the array and its owner when the field belongs to an array item", () => {
+        const data = { items: [{ name: "a" }] };
+
+        const ctx = capturedContext((rule: any) => ({ items: [{ _name: rule }] }), data);
+
+        expect(ancestorValues(ctx)).toEqual([data.items[0], data.items, data]);
+    });
+
+    it("should chain the inner array, the outer array and its owner when the field is an item of a nested array", () => {
+        const data = { matrix: [["a"]] };
+
+        const ctx = capturedContext((rule: any) => ({ matrix: [[rule]] }), data);
+
+        expect(ancestorValues(ctx)).toEqual([data.matrix[0], data.matrix, data]);
+    });
+
+    it("should reach the same ancestor objects as the data holds", () => {
+        const data = { items: [{ name: "a" }] };
+
+        const ctx = capturedContext((rule: any) => ({ items: [{ _name: rule }] }), data);
+
+        expect(ctx.parentContext.parentContext.value).toBe(data.items);
+    });
+});
+
 describe("Validator – validation context", () => {
     it("should expose the form data as parent when the field is at the root", () => {
         const data = { value: "root" };
@@ -752,14 +825,66 @@ describe("Validator.validate – scoped to a changed field", () => {
         expect([...result.keys()]).toEqual(["title"]);
     });
 
-    it("should skip the field rules when a path below that field changes", () => {
+    it("should revalidate the field rules when a path below that field changes", () => {
         const validator = new Validator<any>({
             _name: new FieldValidations(required("Name is required")),
         });
 
         const result = validator.validate({ data: { name: "" }, fieldName: "name.first" });
 
-        expect(result.size).toBe(0);
+        expect(textsFor(result, "name")).toEqual(["Name is required"]);
+    });
+
+    it("should revalidate the object rule when a field of that object changes", () => {
+        const validator = new Validator<any>({
+            _address: new FieldValidations({ check: (ctx: any) => !ctx.value.city || !ctx.value.zip, message: "City and zip are required" }),
+        });
+
+        const result = validator.validate({ data: { address: { city: "Riga", zip: "" } }, fieldName: "address.city" });
+
+        expect(textsFor(result, "address")).toEqual(["City and zip are required"]);
+    });
+
+    it("should revalidate the array rule when a field of one of its items changes", () => {
+        const validator = new Validator<any>({
+            _items: new FieldValidations({ check: (ctx: any) => !ctx.value.some((item: any) => item.checked), message: "Check one item" }),
+        });
+
+        const result = validator.validate({ data: { items: [{ checked: true }] }, fieldName: "items[0].checked" });
+
+        expect(textsFor(result, "items")).toEqual([]);
+    });
+
+    it("should revalidate the item rule of the changed item only when a field of that item changes", () => {
+        const validator = new Validator<any>({
+            items: [
+                new FieldValidations({ check: (ctx: any) => ctx.value.from > ctx.value.to, message: "From must not exceed to" }),
+                { _from: new FieldValidations(required("From is required")) },
+            ],
+        });
+
+        const result = validator.validate({
+            data: { items: [{ from: "1", to: "2" }, { from: "3", to: "2" }] },
+            fieldName: "items[1].from",
+        });
+
+        expect([...result.keys()].sort()).toEqual(["items[1]", "items[1].from"]);
+    });
+
+    it("should revalidate the rules of every ancestor when a deeply nested field changes", () => {
+        const validator = new Validator<any>({
+            _orders: new FieldValidations({ check: () => true, message: "Orders" }),
+            orders: [{
+                lines: [new FieldValidations({ check: () => true, message: "Line" })],
+            }],
+        });
+
+        const result = validator.validate({
+            data: { orders: [{ lines: [{ qty: 1 }] }] },
+            fieldName: "orders[0].lines[0].qty",
+        });
+
+        expect([...result.keys()].sort()).toEqual(["orders", "orders[0].lines[0]"]);
     });
 });
 

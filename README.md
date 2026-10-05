@@ -18,6 +18,17 @@ One key thing to note is that Kerty forms does not handle form submission and as
     - **Field subscriber**: Use `useForm` + `useField` to subscribe to specific fields - only re-render when those fields change;
 - **Validation Out-of-the-Box** - Declarative validators with rule sets, custom messages, and severity levels;
 
+## 📖 Documentation
+
+- [Concepts](docs/concepts.md) - how the form holds data, tracks fields and notifies components;
+- [KertyForm](docs/reference/kerty-form.md) - every form method;
+- [Hooks](docs/reference/hooks.md) - creating forms, subscribing components, field components and lists inside lists;
+- [Validation](docs/reference/validation.md) - validators, rules and results;
+- [Configuration](docs/reference/config.md) - form options;
+- [llms.txt](llms.txt) - an index of these docs for AI tools.
+
+The docs are also included in the npm package, in `node_modules/@kerty-ui/react-forms/docs`.
+
 ## 🚀 Quick Start
 
 ### Simple Form - just like using `useState`
@@ -73,7 +84,7 @@ type LoginModel = {
 }
 
 const LoginForm = () => {
-    const [form, data, state, formValidationResult] = useFormWatch<Partial<LoginForm>>({
+    const [form, data, state, formValidationResult] = useFormWatch<Partial<LoginModel>>({
         validator: () => new SingleMessageDrivenValidator((result, { data }) => {
             if(!data.username) {
                 result.setFieldMessage("username", "Username is required");

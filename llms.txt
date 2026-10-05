@@ -1,0 +1,32 @@
+# @kerty-ui/react-forms
+
+> A React 19 library for controlled forms. A form object outside React holds the data, field state and validation results; components subscribe to the parts they show and change data through form methods. Data is immutable, and nested objects and arrays are addressed by field paths such as `persons[0].name`. It doesn't submit forms or run async validation.
+
+Rules to follow when writing code with this library:
+
+- Change data only through form methods (`setFieldValue`, `appendItems`, `removeItems`, …). Never mutate the data object or anything read from the form.
+- Field names are paths: `"address.city"`, `"persons[0].phoneNumbers[1]"`. In `ValidatorBuilder` only, array items are written as `[]`: `"persons[].name"`.
+- Small forms: `const [form, data] = useFormWatch<T>(options)` re-renders on every change. Large forms: `const form = useForm<T>(options)` with `<FormProvider value={form}>` and `useField` / `useArrayField` per field component.
+- `useField` needs explicit type arguments when the form comes from context: `useField<Person, "email">({ name: "email" })`.
+- `FormField` and `FormArrayField` are `useField` and `useArrayField` as render-prop components: same props, and children receive `{ field, form }`. Pass `form={form}` so the model and name are inferred.
+- Nested arrays are array fields named with the outer index: `` `projects[${i}].tasks` ``. Add `as const` when storing a built name in a variable.
+- Key array rows by an id stored in the item, never by the index. Field state moves with items on remove and move; React state only moves with the key.
+- A `useDataWatch` / `useStateWatch` selector that builds a new array or object needs `isEqual`: `shallowEqual` when its items are primitives or values taken from the data, `deepEqual` when it creates new objects. Both are exported.
+- Hook options are read on the first render only. Change them with `form.updateConfiguration`, `form.setValidator` or `form.reset`.
+- In a `Validator` rule, `check` returns `true` when the message should be shown (the failure case). Severity defaults to `Severity.Error`; only errors make a field invalid.
+- A rule that reads other fields needs `hasDependency: true`, or it won't rerun when those fields change.
+- Call `form.validate()` on submit; it returns `{ isValid, invalidFields }`. Apply server errors with `form.applyValidationResults(new SingleMessageResults<T>().setFieldMessage(...))`.
+- `silent: true` on a change skips listener notifications and touch tracking; data, dirty state and validation still update.
+
+## Docs
+
+- [Concepts](docs/concepts.md): the form model, field names, immutable data, tracked fields, field state, notifications, arrays, validation lifecycle
+- [KertyForm](docs/reference/kerty-form.md): every form method, with behaviour and edge cases
+- [Hooks](docs/reference/hooks.md): useForm, useFormWatch, FormProvider, useField, useArrayField, FormField, FormArrayField, lists inside lists, watch hooks and choosing isEqual
+- [Validation](docs/reference/validation.md): Validator schemas and rules, ValidatorBuilder, message-driven validators, results, Validations check helpers
+- [Configuration](docs/reference/config.md): form options and their defaults
+
+## Optional
+
+- [README](README.md): introduction and quick-start examples
+- [Type definitions](dist/index.d.ts): the public API with JSDoc

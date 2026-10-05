@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { KertyForm, Severity, ValidationResult, defaultFormConfig, type ObjectData } from "../src/lib";
+import { afterEach, describe, expect, it } from "vitest";
+import { KertyForm, Severity, ValidationResult, defaultFormConfig, setInternalNamePrefix, type ObjectData } from "../src/lib";
 
 type LoginForm = {
     username: string;
@@ -387,6 +387,30 @@ describe("KertyForm.removeFieldValue", () => {
         expect(form.getData()).toEqual({});
     });
 
+    it("should remove the array item once when its name is listed twice", () => {
+        const form = new KertyForm<any>({ data: { items: ["a", "b", "c"] } });
+
+        form.removeFieldValue(["items[1]", "items[1]"]);
+
+        expect(form.getData().items).toEqual(["a", "c"]);
+    });
+
+    it("should remove each named array item once when names are repeated among others", () => {
+        const form = new KertyForm<any>({ data: { items: ["a", "b", "c", "d"] } });
+
+        form.removeFieldValue(["items[2]", "items[0]", "items[2]"]);
+
+        expect(form.getData().items).toEqual(["b", "d"]);
+    });
+
+    it("should remove the nested array item once when its name is listed twice", () => {
+        const form = new KertyForm<any>({ data: { orders: [{ lines: ["a", "b", "c"] }] } });
+
+        form.removeFieldValue(["orders[0].lines[1]", "orders[0].lines[1]"]);
+
+        expect(form.getData().orders[0].lines).toEqual(["a", "c"]);
+    });
+
     it("should mark the form dirty when a field with an initial value is removed", () => {
         const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
         register(form, "username");
@@ -648,6 +672,39 @@ describe("KertyForm – dirty state of registered ancestors", () => {
         form.setFieldValue("items[0].name", "b");
 
         expect(form.getFieldState("items").isDirty).toBe(true);
+    });
+});
+
+describe("KertyForm – dirty state of ancestors when a property missing from the initial data is cleared", () => {
+
+    it("should mark the parent clean when the missing property is filled in and cleared", () => {
+        const form = new KertyForm<any>({ data: { person: {} } });
+        register(form, "person");
+        form.setFieldValue("person.name", "John");
+
+        form.setFieldValue("person.name", "");
+
+        expect(form.getFieldState("person").isDirty).toBe(false);
+    });
+
+    it("should mark the form clean when the missing property is filled in and cleared", () => {
+        const form = new KertyForm<any>({ data: { person: {} } });
+        register(form, "person");
+        form.setFieldValue("person.name", "John");
+
+        form.setFieldValue("person.name", "");
+
+        expect(form.getState().isDirty).toBe(false);
+    });
+
+    it("should mark the array clean when a missing item property is filled in and cleared", () => {
+        const form = new KertyForm<any>({ data: { items: [{}] } });
+        register(form, "items");
+        form.setFieldValue("items[0].name", "John");
+
+        form.setFieldValue("items[0].name", "");
+
+        expect(form.getFieldState("items").isDirty).toBe(false);
     });
 });
 
@@ -1037,11 +1094,40 @@ describe("KertyForm.touch", () => {
         expect(form.getFieldState("password").isTouched).toBe(false);
     });
 
-    it("should touch no individual field when called without a field name", () => {
+    it("should mark every registered field touched when called without a field name", () => {
         const form = new KertyForm<LoginForm>({});
         register(form, "username");
+        register(form, "password");
 
         form.touch();
+
+        expect([form.getFieldState("username").isTouched, form.getFieldState("password").isTouched]).toEqual([true, true]);
+    });
+
+    it("should mark a nested registered field touched when called without a field name", () => {
+        const form = new KertyForm<any>({ data: { persons: [{ name: "bob" }] } });
+        register(form, "persons[0].name");
+
+        form.touch();
+
+        expect(form.getFieldState("persons[0].name").isTouched).toBe(true);
+    });
+
+    it("should notify a field listener when called without a field name", () => {
+        const form = new KertyForm<LoginForm>({});
+        let calls = 0;
+        form.addFieldListener("username", () => { calls++; });
+
+        form.touch();
+
+        expect(calls).toBe(1);
+    });
+
+    it("should leave a field registered after the call untouched when called without a field name", () => {
+        const form = new KertyForm<LoginForm>({});
+        form.touch();
+
+        register(form, "username");
 
         expect(form.getFieldState("username").isTouched).toBe(false);
     });
@@ -1239,5 +1325,47 @@ describe("KertyForm.getFieldSnapshot", () => {
         form.setFieldValue("b", 2);
 
         expect(snapshot()).toBe(before);
+    });
+});
+
+describe("KertyForm – data properties that start with a symbol", () => {
+    const hashKeyForm = () => {
+        const form = new KertyForm<any>({ data: { foo: "a", "#foo": { x: "1" } } });
+        register(form, "foo");
+        register(form, "#foo.x");
+        return form;
+    };
+
+    it("should touch the field of a #-prefixed property next to a property of the same name when every field is touched", () => {
+        const form = hashKeyForm();
+
+        form.touch();
+
+        expect(form.getFieldState("#foo.x").isTouched).toBe(true);
+    });
+
+    it("should report the invalid field of a #-prefixed property next to a property of the same name", () => {
+        const form = hashKeyForm();
+        form.applyFieldValidationResult("#foo.x", new ValidationResult().add({ text: "Required" }));
+
+        const invalidFields = form.getInvalidFields();
+
+        expect(invalidFields).toEqual(["#foo.x"]);
+    });
+});
+
+describe("KertyForm – a changed internal name prefix", () => {
+    afterEach(() => {
+        setInternalNamePrefix(".");
+    });
+
+    it("should track the dirty state of a parent when the prefix was changed before the form was created", () => {
+        setInternalNamePrefix("~");
+        const form = new KertyForm<any>({ data: { person: { name: "John" } } });
+        register(form, "person");
+
+        form.setFieldValue("person.name", "Jane");
+
+        expect(form.getFieldState("person").isDirty).toBe(true);
     });
 });

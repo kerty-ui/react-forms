@@ -1,12 +1,13 @@
 ﻿import {
     FormValidationResult,
+    useField,
     useDataWatch,
     useForm,
     useStateWatch,
     Severity,
     ValidationResult,
     SingleMessageDrivenValidator,
-    type IKertyForm, type FieldPathByValue, useField,
+    type IKertyForm,
 } from "@kerty-ui/react-forms";
 import { Button } from "../../../components/button.tsx";
 import { ExampleBlock } from "../../../components/example-block.tsx";
@@ -15,6 +16,7 @@ import { FieldMessage } from "../../../components/field-message.tsx";
 import { Message } from "../../../components/message.tsx";
 import type { LoginForm } from "../../../types";
 import type { SubmitEventHandler } from "react";
+import type { AutoFieldPath } from "../../../../lib";
 
 const codeExample = `
 
@@ -74,13 +76,13 @@ const KertyValidationCustomComponentExample = () => {
                 </FormValidationResult>
                 <FormField form={form} name="username">
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                         <div className="field">
                             <label>Username <RenderCount /></label>
                             <input
                                 placeholder="Enter your username"
                                 value={field.value ?? ""}
-                                onChange={(e) => setFieldValue(e.target.value)}
+                                onChange={(e) => field.setValue(e.target.value)}
                             />
                             {
                                 field.validationResult &&
@@ -91,14 +93,14 @@ const KertyValidationCustomComponentExample = () => {
                 </FormField>
                 <FormField form={form} name="password">
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                         <div className="field">
                             <label>Password <RenderCount /></label>
                             <input
                                 type="password"
                                 placeholder="Enter your password"
                                 value={field.value ?? ""}
-                                onChange={(e) => setFieldValue(e.target.value)}
+                                onChange={(e) => field.setValue(e.target.value)}
                             />
                             {
                                 field.validationResult &&
@@ -256,14 +258,14 @@ const FormState = <TData,>(props: {
 }
 
 
-const TextField = <TData, TName extends FieldPathByValue<TData, string>,>(props: {
+const TextField = <TData, TPath extends string,>(props: {
     form: IKertyForm<TData>,
-    name: TName,
+    name: AutoFieldPath<TData, TPath, string>,
     label: string,
     placeholder?: string;
     type?: "text" | "password";
 }) => {
-    const field = useField<string>(props.form, props.name);
+    const [field] = useField<any, string>({ form: props.form, name: props.name });
     return (
         <div className="field">
             <label>{props.label} <RenderCount /></label>
@@ -271,7 +273,7 @@ const TextField = <TData, TName extends FieldPathByValue<TData, string>,>(props:
                 type={props.type ?? "text"}
                 placeholder={props.placeholder}
                 value={field.value ?? ""}
-                onChange={(e) => props.form.setFieldValue(props.name, e.target.value)}
+                onChange={(e) => field.setValue(e.target.value)}
             />
             {
                 field.validationResult &&

@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { KertyForm } from "../src/lib/kertyForm";
-import { FieldValidations, Validator } from "../src/lib/validation/validator";
-import { SingleMessageDrivenValidator } from "../src/lib/validation/singleMessageDrivenValidator";
-import { ValidatorBuilder } from "../src/lib/validation/validatorBuilder";
-import { ValidationResult } from "../src/lib/validation/validationResult";
-import { Validations } from "../src/lib/validation/validations";
-import { Severity, type FieldPath, type IKertyForm } from "../src/lib/types";
+import {
+    KertyForm,
+    FieldValidations,
+    Validator,
+    SingleMessageDrivenValidator,
+    ValidatorBuilder,
+    ValidationResult,
+    Validations,
+    Severity,
+    type FieldPath,
+    type IKertyForm
+} from "../src/lib";
 
 type LoginForm = {
     username: string;
@@ -81,6 +86,17 @@ describe("KertyForm.validate", () => {
         form.validate();
 
         expect(form.getFieldState("username")).toMatchObject({ isValid: false, isValidated: true });
+    });
+
+    it.each([
+        { mode: "fieldDriven", validator: requiredLoginValidator },
+        { mode: "messageDriven", validator: requiredLoginMessageValidator },
+    ])("should mark a registered field without messages as valid and validated when a $mode validator runs", ({ validator }) => {
+        const form = mountedForm(validator(), { username: "bob" });
+
+        form.validate();
+
+        expect(form.getFieldState("username")).toMatchObject({ isValid: true, isValidated: true });
     });
 
     it("should mark the form as validated when validation runs", () => {
@@ -479,6 +495,62 @@ describe("KertyForm – dependent fields on change", () => {
     });
 });
 
+describe("KertyForm – dependent fields whose result does not change", () => {
+    const nicknameForm = (nickname: string) => {
+        const form = new KertyForm<any>({
+            data: { name: "", nickname },
+            validator: new Validator<any>({
+                _nickname: new FieldValidations({ check: isTextEmpty, message: "Nickname is required", hasDependency: true }),
+            }),
+        });
+        form.addFieldListener("name", () => { });
+        form.addFieldListener("nickname", () => { });
+        form.validate();
+        return form;
+    };
+
+    it("should keep the snapshot of a dependent field that still passes when another field changes", () => {
+        const form = nicknameForm("Johnny");
+        const snapshot = form.getFieldSnapshot("nickname");
+        const before = snapshot();
+
+        form.setFieldValue("name", "John");
+
+        expect(snapshot()).toBe(before);
+    });
+
+    it("should not notify the listener of a dependent field that still passes when another field changes", () => {
+        const form = nicknameForm("Johnny");
+        let calls = 0;
+        form.addFieldListener("nickname", () => calls++);
+
+        form.setFieldValue("name", "John");
+
+        expect(calls).toBe(0);
+    });
+
+    it("should notify the listener of a dependent field when its message changes", () => {
+        const form = new KertyForm<any>({
+            data: { name: "", nickname: "" },
+            validator: new Validator<any>({
+                _nickname: new FieldValidations({
+                    check: () => true,
+                    message: (ctx: any) => `Nickname for ${ctx.parent.name} is required`,
+                    hasDependency: true,
+                }),
+            }),
+        });
+        form.addFieldListener("nickname", () => { });
+        form.validate();
+        let calls = 0;
+        form.addFieldListener("nickname", () => calls++);
+
+        form.setFieldValue("name", "John");
+
+        expect(calls).toBe(1);
+    });
+});
+
 // ─── on-change revalidation of array item fields ─────────────────────────────
 
 describe("KertyForm – fieldDriven revalidation of array item fields", () => {
@@ -546,6 +618,50 @@ describe("KertyForm – fieldDriven revalidation of array item fields", () => {
         form.setFieldValue("items[0].name", "");
 
         expect(form.getValidationMessage("items[0].name")?.text).toBe("Name is required");
+    });
+});
+
+describe("KertyForm – fieldDriven revalidation of a rule on an ancestor of the changed field", () => {
+    const checklistForm = () => {
+        const form = new KertyForm<any>({
+            data: { items: [{ checked: false }, { checked: false }] },
+            validator: new Validator<any>({
+                _items: new FieldValidations({
+                    check: (ctx: any) => !ctx.value.some((item: any) => item.checked),
+                    message: "Check one item",
+                }),
+            }),
+        });
+        form.addFieldListener("items", () => { });
+        return form;
+    };
+
+    it("should clear the array message when an item field change makes the array valid", () => {
+        const form = checklistForm();
+        form.validate();
+
+        form.setFieldValue("items[1].checked", true);
+
+        expect(form.getValidationMessage("items")).toBeUndefined();
+    });
+
+    it("should make the form valid when an item field change makes the array valid", () => {
+        const form = checklistForm();
+        form.validate();
+
+        form.setFieldValue("items[1].checked", true);
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it("should report the array message when an item field change makes the array invalid", () => {
+        const form = checklistForm();
+        form.setFieldValue("items[0].checked", true);
+        form.validate();
+
+        form.setFieldValue("items[0].checked", false);
+
+        expect(form.getValidationMessage("items")?.text).toBe("Check one item");
     });
 });
 
@@ -776,6 +892,93 @@ describe("KertyForm – fieldDriven validation of orphaned item fields after rem
     });
 });
 
+describe("KertyForm – fieldDriven validation of orphaned item fields after setFieldValue shortens the array", () => {
+    const gridForm = (items: { name: string }[]) => {
+        const form = new KertyForm<any>({
+            data: { items },
+            validator: new Validator<any>({
+                items: [{ _name: new FieldValidations({ check: isTextEmpty, message: "Name is required" }) }],
+            }),
+        });
+        items.forEach((_, index) => form.addFieldListener(`items[${index}].name`, () => { }));
+        return form;
+    };
+
+    it("should make the form valid when the failing item is dropped from the array", () => {
+        const form = gridForm([{ name: "John" }, { name: "" }]);
+        form.validate();
+
+        form.setFieldValue("items", [{ name: "John" }]);
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it("should not report the dropped item field as invalid when the failing item is dropped from the array", () => {
+        const form = gridForm([{ name: "John" }, { name: "" }]);
+        form.validate();
+
+        form.setFieldValue("items", [{ name: "John" }]);
+
+        expect(form.getInvalidFields()).toEqual([]);
+    });
+
+    it("should clear the message of the dropped item field when the failing item is dropped from the array", () => {
+        const form = gridForm([{ name: "John" }, { name: "" }]);
+        form.validate();
+
+        form.setFieldValue("items", [{ name: "John" }]);
+
+        expect(form.getValidationMessage("items[1].name")).toBeUndefined();
+    });
+
+    it("should keep the message of a remaining item when the array is shortened", () => {
+        const form = gridForm([{ name: "" }, { name: "" }]);
+        form.validate();
+
+        form.setFieldValue("items", [{ name: "" }]);
+
+        expect(form.getValidationMessage("items[0].name")?.text).toBe("Name is required");
+    });
+
+    it("should make the form valid when the failing line is dropped from a nested array by replacing its parent array", () => {
+        const form = new KertyForm<any>({
+            data: { orders: [{ lines: [{ qty: "1" }, { qty: "" }] }] },
+            validator: new Validator<any>({
+                orders: [{ lines: [{ _qty: new FieldValidations({ check: isTextEmpty, message: "Qty is required" }) }] }],
+            }),
+        });
+        form.validate();
+
+        form.setFieldValue("orders", [{ lines: [{ qty: "1" }] }]);
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it("should make the form valid when the failing cell is dropped from an array of arrays by replacing the outer array", () => {
+        const form = new KertyForm<any>({
+            data: { matrix: [["1", ""]] },
+            validator: new Validator<any>({
+                matrix: [[new FieldValidations({ check: isTextEmpty, message: "Cell is required" })]],
+            }),
+        });
+        form.validate();
+
+        form.setFieldValue("matrix", [["1"]]);
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it("should not mark an appended item touched when the touched item was dropped from the array before", () => {
+        const form = gridForm([{ name: "John" }, { name: "Jane" }]);
+        form.touch("items[1].name");
+        form.setFieldValue("items", [{ name: "John" }]);
+
+        form.appendItems("items", { name: "" });
+
+        expect(form.getFieldState("items[1].name").isTouched).toBe(false);
+    });
+});
+
 describe("KertyForm – messageDriven revalidation on change", () => {
     it("should report both fields as invalid when the whole form is validated", () => {
         const form = mountedForm(requiredLoginMessageValidator());
@@ -849,6 +1052,124 @@ describe("KertyForm – messageDriven revalidation on change", () => {
         form.setFieldValue("password", "b");
 
         expect(confirmPasswordCalls).toBe(before + 1);
+    });
+});
+
+describe("KertyForm – messageDriven validation of a field mounted after validate", () => {
+    const countingMessageValidator = () => {
+        const validator = requiredLoginMessageValidator();
+        const counter = { calls: 0 };
+        const validate = validator.validate.bind(validator);
+        validator.validate = (ctx) => {
+            counter.calls++;
+            return validate(ctx);
+        };
+        return { validator, counter };
+    };
+
+    it("should not re-run the validator when a field gets its first listener", () => {
+        const { validator, counter } = countingMessageValidator();
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator });
+        form.addFieldListener("username", () => { });
+        form.validate();
+        const before = counter.calls;
+
+        form.addFieldListener("password", () => { });
+
+        expect(counter.calls).toBe(before);
+    });
+
+    it("should keep the message from the last validation for a newly mounted field", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator: requiredLoginMessageValidator() });
+        form.addFieldListener("username", () => { });
+        form.validate();
+
+        form.addFieldListener("password", () => { });
+
+        expect(form.getValidationMessage("password")?.text).toBe("Password is required");
+    });
+
+    it("should not notify another field with a message when a field gets its first listener", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator: requiredLoginMessageValidator() });
+        let usernameCalls = 0;
+        form.addFieldListener("username", () => { usernameCalls++; });
+        form.validate();
+        const before = usernameCalls;
+
+        form.addFieldListener("password", () => { });
+
+        expect(usernameCalls).toBe(before);
+    });
+
+    it("should restore the message of a remounted field when results are not kept without listeners", () => {
+        const form = new KertyForm<Partial<LoginForm>>({
+            data: {},
+            validator: requiredLoginMessageValidator(),
+            keepValidationResultsWithoutListeners: false,
+        });
+        form.addFieldListener("username", () => { });
+        const unsubscribe = form.addFieldListener("password", () => { });
+        form.validate();
+        unsubscribe();
+
+        form.addFieldListener("password", () => { });
+
+        expect(form.getValidationMessage("password")?.text).toBe("Password is required");
+    });
+});
+
+describe("KertyForm – validation after the last listener of a validated field unsubscribes", () => {
+    const validatedLoginForm = (keepValidationResultsWithoutListeners: boolean) => {
+        const form = new KertyForm<Partial<LoginForm>>({
+            data: { password: "secret" },
+            validator: requiredLoginValidator(),
+            keepValidationResultsWithoutListeners,
+        });
+        const unsubscribe = form.addFieldListener("username", () => { });
+        form.validate();
+        return { form, unsubscribe };
+    };
+
+    it("should run the validator again when the results are not kept without listeners", () => {
+        const validator = countingValidator();
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator, keepValidationResultsWithoutListeners: false });
+        const unsubscribe = form.addFieldListener("username", () => { });
+        form.validate();
+        unsubscribe();
+
+        form.validate();
+
+        expect(validator.fullRuns).toBe(2);
+    });
+
+    it("should report the form invalid again when the failing field's results are not kept without listeners", () => {
+        const { form, unsubscribe } = validatedLoginForm(false);
+        unsubscribe();
+
+        form.validate();
+
+        expect(form.getState().isValid).toBe(false);
+    });
+
+    it("should report the failing field's message again when the results are not kept without listeners", () => {
+        const { form, unsubscribe } = validatedLoginForm(false);
+        unsubscribe();
+
+        form.validate();
+
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
+    });
+
+    it("should reuse the previous result when the results are kept without listeners", () => {
+        const validator = countingValidator();
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator, keepValidationResultsWithoutListeners: true });
+        const unsubscribe = form.addFieldListener("username", () => { });
+        form.validate();
+        unsubscribe();
+
+        form.validate();
+
+        expect(validator.fullRuns).toBe(1);
     });
 });
 
@@ -1044,6 +1365,35 @@ describe("KertyForm – externally applied field results without a validator", (
     });
 });
 
+describe("KertyForm – externally applied field results with a fieldDriven validator that has no rules for the field", () => {
+    const passwordOnlyValidator = () => new Validator<Partial<LoginForm>>({
+        _password: new FieldValidations({ check: isTextEmpty, message: "Password is required" }),
+    });
+
+    it.each([
+        { label: "an error", severity: Severity.Error },
+        { label: "a warning", severity: Severity.Warning },
+        { label: "an info message", severity: Severity.Info },
+        { label: "a success message", severity: Severity.Success },
+    ])("should clear $label when the field changes afterwards", ({ severity }) => {
+        const form = mountedForm(passwordOnlyValidator(), { password: "secret" });
+        form.applyFieldValidationResult("username", new ValidationResult().add({ text: "Applied", severity }));
+
+        form.setFieldValue("username", "alice");
+
+        expect(form.getValidationMessage("username")).toBeUndefined();
+    });
+
+    it("should leave a warning applied to a different field in place when one field changes", () => {
+        const form = mountedForm(passwordOnlyValidator(), { password: "secret" });
+        form.applyFieldValidationResult("password", warning("Weak password"));
+
+        form.setFieldValue("username", "alice");
+
+        expect(form.getValidationMessage("password")?.text).toBe("Weak password");
+    });
+});
+
 describe("KertyForm.getValidationResult", () => {
     it("should return the form result when no name is passed", () => {
         const form = mountedForm();
@@ -1159,6 +1509,32 @@ describe("KertyForm.applyValidationResults", () => {
         expect(form.getValidationMessage("username")).toBeUndefined();
     });
 
+    it("should mark a registered field without results validated and valid when applied in replace mode", () => {
+        const form = mountedForm();
+
+        form.applyValidationResults(new Map([["username", error("Taken")]]), { mode: "replace" });
+
+        expect(form.getFieldState("password")).toMatchObject({ isValid: true, isValidated: true });
+    });
+
+    it("should mark every registered field validated when an empty map is applied in replace mode", () => {
+        const form = mountedForm();
+
+        form.applyValidationResults(new Map(), { mode: "replace" });
+
+        expect([form.getFieldState("username").isValidated, form.getFieldState("password").isValidated]).toEqual([true, true]);
+    });
+
+    it("should notify a registered field listener when its field becomes validated in replace mode", () => {
+        const form = new KertyForm<Partial<LoginForm>>({});
+        let calls = 0;
+        form.addFieldListener("password", () => { calls++; });
+
+        form.applyValidationResults(new Map([["username", error("Taken")]]), { mode: "replace" });
+
+        expect(calls).toBe(1);
+    });
+
     it("should keep previous field results when applied in merge mode", () => {
         const form = mountedForm();
         form.applyValidationResults(new Map([["username", error("Taken")]]));
@@ -1168,22 +1544,22 @@ describe("KertyForm.applyValidationResults", () => {
         expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
-    it("should clear a field result when the map holds an empty result for it in merge mode", () => {
+    it("should keep a field result when the map holds an empty result for it in merge mode", () => {
         const form = mountedForm();
         form.applyValidationResults(new Map([["username", error("Taken")]]));
 
         form.applyValidationResults(new Map([["username", new ValidationResult()]]), { mode: "merge" });
 
-        expect(form.getValidationMessage("username")).toBeUndefined();
+        expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
-    it("should make the form valid again when every field result is cleared in merge mode", () => {
+    it("should keep the form invalid when an empty result is merged for the only invalid field", () => {
         const form = mountedForm();
         form.applyValidationResults(new Map([["username", error("Taken")]]));
 
         form.applyValidationResults(new Map([["username", new ValidationResult()]]), { mode: "merge" });
 
-        expect(form.getState().isValid).toBe(true);
+        expect(form.getState().isValid).toBe(false);
     });
 
     it("should leave the form untouched when an empty map is applied in merge mode", () => {
@@ -1323,6 +1699,24 @@ describe("KertyForm.resetValidationResults", () => {
         form.resetFieldValidationResults("username");
 
         expect(form.getState().isValidated).toBe(true);
+    });
+
+    it("should keep an unused field out of touch() when its validation results are reset before it is used", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {} });
+        form.resetFieldValidationResults("username");
+
+        form.touch();
+
+        expect(form.getFieldState("username").isTouched).toBe(false);
+    });
+
+    it("should keep an unused field out of validate() when its validation results are reset before it is used", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {} });
+        form.resetFieldValidationResults("username");
+
+        form.validate();
+
+        expect(form.getFieldState("username").isValidated).toBe(false);
     });
 
     it("should still validate a field that mounts after another field was reset", () => {

@@ -7,7 +7,16 @@ const CHAR_EMPTY_SPACE = 32;
 const CHAR_DIGIT_0 = 48;
 const CHAR_DIGIT_9 = 57;
 
-export let INTERNAL_NAME_PREFIX = "#";
+export let INTERNAL_NAME_PREFIX = ".";
+
+/**
+ * Sets the prefix of the keys under which forms store field state; data property names must not start with it.
+ * Call it once, before any form is created.
+ * @param prefix The new prefix.
+ */
+export const setInternalNamePrefix = (prefix: string) => {
+    INTERNAL_NAME_PREFIX = prefix;
+};
 
 export const getFieldPath = (fieldName: string, includeInternalName: boolean = false): FieldPathPart[] => {
     const path: FieldPathPart[] = [];

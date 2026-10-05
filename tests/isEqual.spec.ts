@@ -384,6 +384,50 @@ describe("isEqual - same reference optimization", () => {
     });
 });
 
+describe("isEqual - data deeper than the cycle tracking depth", () => {
+    const createChain = (depth: number, leaf: unknown) => {
+        const root: any = {};
+        let node = root;
+        for (let i = 0; i < depth; i++) {
+            node = node.child = {};
+        }
+        node.leaf = leaf;
+        return { root, deepest: node };
+    };
+
+    it("should return true for equal chains 200 levels deep", () => {
+        const a = createChain(200, "x").root;
+        const b = createChain(200, "x").root;
+
+        expect(isEqual(a, b)).toBe(true);
+    });
+
+    it("should return false for chains 200 levels deep that differ at the bottom", () => {
+        const a = createChain(200, "x").root;
+        const b = createChain(200, "y").root;
+
+        expect(isEqual(a, b)).toBe(false);
+    });
+
+    it.each([false, true])("should return true for equal cycles that start 100 levels deep (null as default: %s)", (treatNullAsDefault) => {
+        const a = createChain(100, "x");
+        a.deepest.self = a.deepest;
+        const b = createChain(100, "x");
+        b.deepest.self = b.deepest;
+
+        expect(isEqual(a.root, b.root, treatNullAsDefault)).toBe(true);
+    });
+
+    it("should return false for cycles that start 100 levels deep and differ inside the cycle", () => {
+        const a = createChain(100, "x");
+        a.deepest.self = a.deepest;
+        const b = createChain(100, "x");
+        b.deepest.self = { leaf: "y" };
+
+        expect(isEqual(a.root, b.root)).toBe(false);
+    });
+});
+
 describe("isEqual - circular reference handling", () => {
     it("should handle circular references gracefully", () => {
         const obj1: any = { a: 1 };
@@ -593,6 +637,35 @@ describe("isEqual - treatNullAsDefault", () => {
             { items: null, tags: null },
             true
         )).toBe(true);
+    });
+
+    it.each([
+        ["an empty string", ""],
+        ["an empty array", []],
+        ["null", null],
+        ["undefined", undefined],
+    ])("should treat a missing property as equal to a property holding %s", (_, value) => {
+        expect(isEqual({ a: 1 }, { a: 1, b: value }, true)).toBe(true);
+    });
+
+    it("should treat a property holding an empty string as equal to a missing property", () => {
+        expect(isEqual({ a: 1, b: "" }, { a: 1 }, true)).toBe(true);
+    });
+
+    it("should treat a missing nested property as equal to a nested property holding an empty string", () => {
+        expect(isEqual({ person: {} }, { person: { name: "" } }, true)).toBe(true);
+    });
+
+    it("should treat a missing property of an array item as equal to an item property holding an empty string", () => {
+        expect(isEqual([{}], [{ name: "" }], true)).toBe(true);
+    });
+
+    it("should treat a missing property as different from a property holding a value", () => {
+        expect(isEqual({ a: 1 }, { a: 1, b: "x" }, true)).toBe(false);
+    });
+
+    it("should treat a missing property as different from a property holding an empty string when the flag is not set", () => {
+        expect(isEqual({ a: 1 }, { a: 1, b: "" })).toBe(false);
     });
 });
 

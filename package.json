@@ -16,7 +16,9 @@
   },
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "docs",
+    "llms.txt"
   ],
   "scripts": {
     "dev": "npm run dev:wiki",

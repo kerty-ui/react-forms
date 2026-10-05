@@ -272,7 +272,7 @@ describe("setObjectValue - internal name", () => {
 
         setInternal(data, "person.name", "field");
 
-        expect(data.person).toEqual({ "#name": "field" });
+        expect(data.person).toEqual({ ".name": "field" });
     });
 
     it("should write the internal key inside a new array item node when the last part is an array item", () => {
@@ -280,7 +280,7 @@ describe("setObjectValue - internal name", () => {
 
         setInternal(data, "items[0]", "item");
 
-        expect(data.items[0]).toEqual({ "#": "item" });
+        expect(data.items[0]).toEqual({ ".": "item" });
     });
 
     it("should keep the item fields when the array item is written after one of its fields", () => {
@@ -289,7 +289,7 @@ describe("setObjectValue - internal name", () => {
 
         setInternal(data, "items[0]", "item");
 
-        expect(data.items[0]).toEqual({ "#": "item", "#name": "field" });
+        expect(data.items[0]).toEqual({ ".": "item", ".name": "field" });
     });
 
     it("should keep the array item when one of its fields is written after it", () => {
@@ -298,7 +298,7 @@ describe("setObjectValue - internal name", () => {
 
         setInternal(data, "items[0].name", "field");
 
-        expect(data.items[0]).toEqual({ "#": "item", "#name": "field" });
+        expect(data.items[0]).toEqual({ ".": "item", ".name": "field" });
     });
 
     it("should keep the nested array item when one of its items is written after it", () => {
@@ -307,6 +307,6 @@ describe("setObjectValue - internal name", () => {
 
         setInternal(data, "matrix[0][1]", "cell");
 
-        expect([data.matrix[0]["#"], data.matrix[0][1]["#"]]).toEqual(["row", "cell"]);
+        expect([data.matrix[0]["."], data.matrix[0][1]["."]]).toEqual(["row", "cell"]);
     });
 });

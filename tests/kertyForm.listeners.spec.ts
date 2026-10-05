@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { KertyForm, ValidationResult, Severity, type FieldListenerScope, type FormListenerOptions } from "../src/lib";
+import {
+    KertyForm,
+    ValidationResult,
+    Severity,
+    type FieldListenerScope,
+    type FormListenerOptions
+} from "../src/lib";
 
 const dataOnly: FormListenerOptions = {
     listenDataChange: true,
@@ -174,12 +180,12 @@ describe("KertyForm.addFieldListener", () => {
         expect(count.calls).toBe(0);
     });
 
-    it("should not notify the listener when only the form state changes", () => {
-        const form = new KertyForm<any>({ data: { a: 1 } });
+    it("should not notify the listener when the form and a sibling field become touched", () => {
+        const form = new KertyForm<any>({ data: { a: 1, b: 1 } });
         const [count, listener] = counter();
         form.addFieldListener("a", listener);
 
-        form.touch();
+        form.touch("b");
 
         expect(count.calls).toBe(0);
     });

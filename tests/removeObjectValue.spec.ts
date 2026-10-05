@@ -32,7 +32,7 @@ describe("removeObjectValue - internal name", () => {
     const removeInternal = (data: any, path: string) => removeObjectValue(data, getFieldPath(path, true), true);
 
     it("should delete the internal name of the last part when the last part is a property", () => {
-        const data: any = { person: { name: "Carol", "#name": "field" } };
+        const data: any = { person: { name: "Carol", ".name": "field" } };
 
         removeInternal(data, "person.name");
 
@@ -40,19 +40,19 @@ describe("removeObjectValue - internal name", () => {
     });
 
     it("should keep the other array items at their index when an array item is removed", () => {
-        const data: any = { items: [{ "#": "first" }, { "#": "second" }] };
+        const data: any = { items: [{ ".": "first" }, { ".": "second" }] };
 
         removeInternal(data, "items[0]");
 
-        expect(data.items).toEqual([{}, { "#": "second" }]);
+        expect(data.items).toEqual([{}, { ".": "second" }]);
     });
 
     it("should keep the item fields when the array item is removed", () => {
-        const data: any = { items: [{ "#": "item", "#name": "field" }] };
+        const data: any = { items: [{ ".": "item", ".name": "field" }] };
 
         removeInternal(data, "items[0]");
 
-        expect(data.items[0]).toEqual({ "#name": "field" });
+        expect(data.items[0]).toEqual({ ".name": "field" });
     });
 
     it("should leave the data unchanged when a parent of the path is missing", () => {

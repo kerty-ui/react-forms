@@ -1,7 +1,7 @@
 import { bench, describe } from "vitest";
 import { getObjectValue } from "../../src/lib/utils/getObjectValue";
 import { getFieldPath } from "../../src/lib/utils/getFieldPath";
-import type { FieldPathPart } from "../../src/lib/types";
+import type { FieldPathPart } from "../../src/lib";
 import { createBenchmarkData, SIZES } from "./benchmarkData";
 
 const data = createBenchmarkData();

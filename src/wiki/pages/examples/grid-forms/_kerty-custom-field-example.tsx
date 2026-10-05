@@ -35,7 +35,7 @@ const KertyCustomFieldExample = () => {
     return (
         <article>
             <div>
-                <small>Row count: {data.rows.length}</small>
+                <RowCount form={form} />
             </div>
             <div>
                 <div>
@@ -85,7 +85,7 @@ const KertyCustomFieldExample = () => {
 const GridRowsField = (props: {
     form: IKertyForm<GridForm>;
 }) => {
-    const field = useField(props.form, "rows");
+    const [field] = useField({ form: props.form, name: "rows" });
 
     const removeRow = useCallback((index: number) => {
         props.form.removeItems("rows", index);
@@ -106,7 +106,7 @@ const GridRowField = (props: {
     removeRow: (index: number) => void;
 }) => {
 
-    const field = useField(props.form, \`rows[$\{props.index\}]\`);
+    const [field] = useField({ form: props.form, name: \`rows[$\{props.index\}]\` });
 
     const setFieldValue = (name: string, value: number | null) => {
         props.form.setFieldValue(\`rows[$\{props.index\}]\`, {
@@ -363,7 +363,7 @@ export const KertyCustomFieldExample = () => {
 const GridRowsField = (props: {
     form: IKertyForm<GridForm>;
 }) => {
-    const field = useField(props.form, "rows");
+    const [field] = useField({ form: props.form, name: "rows" });
 
     const removeRow = useCallback((index: number) => {
         props.form.removeItems("rows", index);
@@ -384,7 +384,7 @@ const GridRowField = (props: {
     removeRow: (index: number) => void;
 }) => {
 
-    const field = useField(props.form, `rows[${props.index}]`);
+    const [field] = useField({ form: props.form, name: `rows[${props.index}]` });
 
     const setFieldValue = (name: string, value: number | null) => {
         props.form.setFieldValue(`rows[${props.index}]`, {

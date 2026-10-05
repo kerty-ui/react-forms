@@ -11,6 +11,7 @@ import {
 } from "../src/lib";
 
 type Item = {
+    id?: number;
     code?: string | null;
     transactionId?: number;
 };
@@ -58,6 +59,26 @@ const ItemsTable = ({ form }: { form: IKertyForm<ItemsForm> }) => (
     </div>
 );
 
+const IdKeyedItemsTable = ({ form }: { form: IKertyForm<ItemsForm> }) => {
+    const [items] = useField({ form, name: "items", listen: "child" });
+    return (
+        <div>
+            {items.value!.map((item, index) => <Cell key={item.id} form={form} name={`items[${index}].code`} />)}
+        </div>
+    );
+};
+
+const IndexKeyedItemsTable = ({ form }: { form: IKertyForm<ItemsForm> }) => {
+    const [items] = useField({ form, name: "items", listen: "child" });
+    return (
+        <div>
+            {items.value!.map((_, index) => <Cell key={index} form={form} name={`items[${index}].code`} />)}
+        </div>
+    );
+};
+
+const renderIdKeyedItems = (form: IKertyForm<ItemsForm>) => render(<IdKeyedItemsTable form={form} />);
+
 describe("KertyForm - field state across subscriptions", () => {
 
     it("should drop the field state when the field returns to the default", () => {
@@ -99,5 +120,74 @@ describe("KertyForm - field state across React mounts", () => {
         act(() => { form.prependItems("items", { code: null }); });
 
         expect(view.getByTestId("items[0].code").textContent).toBe("Code is required");
+    });
+});
+
+describe("KertyForm - field state of moved items in rows keyed by id", () => {
+
+    it("should keep the touched state of a shifted item when an earlier item is removed", () => {
+        const form = itemsForm([{ id: 1, code: "A" }, { id: 2, code: "B" }, { id: 3, code: "C" }]);
+        renderIdKeyedItems(form);
+        act(() => { form.touch("items[2].code"); });
+
+        act(() => { form.removeItems("items", 0); });
+
+        expect(form.getFieldState("items[1].code").isTouched).toBe(true);
+    });
+
+    it("should keep the touched state of a shifted item when an item is prepended", () => {
+        const form = itemsForm([{ id: 1, code: "A" }, { id: 2, code: "B" }]);
+        renderIdKeyedItems(form);
+        act(() => { form.touch("items[0].code"); });
+
+        act(() => { form.prependItems("items", { id: 3, code: "C" }); });
+
+        expect(form.getFieldState("items[1].code").isTouched).toBe(true);
+    });
+
+    it("should keep the touched state of a swapped item", () => {
+        const form = itemsForm([{ id: 1, code: "A" }, { id: 2, code: "B" }]);
+        renderIdKeyedItems(form);
+        act(() => { form.touch("items[0].code"); });
+
+        act(() => { form.swapItem("items", 0, 1); });
+
+        expect(form.getFieldState("items[1].code").isTouched).toBe(true);
+    });
+
+    it("should keep the touched state of a moved item", () => {
+        const form = itemsForm([{ id: 1, code: "A" }, { id: 2, code: "B" }, { id: 3, code: "C" }]);
+        renderIdKeyedItems(form);
+        act(() => { form.touch("items[0].code"); });
+
+        act(() => { form.moveItem("items", 0, 2); });
+
+        expect(form.getFieldState("items[2].code").isTouched).toBe(true);
+    });
+
+    it("should keep the applied validation result of a shifted item when results are not kept without listeners", () => {
+        const form = new KertyForm<ItemsForm>({
+            data: { items: [{ id: 1, code: "A" }, { id: 2, code: "B" }, { id: 3, code: "C" }] },
+            keepValidationResultsWithoutListeners: false,
+        });
+        const view = renderIdKeyedItems(form);
+        act(() => { form.applyFieldValidationResult("items[2].code", new ValidationResult().add({ text: "Code is taken" })); });
+
+        act(() => { form.removeItems("items", 0); });
+
+        expect(view.getByTestId("items[1].code").textContent).toBe("Code is taken");
+    });
+});
+
+describe("KertyForm - field state of moved items in rows keyed by index", () => {
+
+    it("should keep the touched state of a shifted item when an earlier item is removed", () => {
+        const form = itemsForm([{ id: 1, code: "A" }, { id: 2, code: "B" }, { id: 3, code: "C" }]);
+        render(<IndexKeyedItemsTable form={form} />);
+        act(() => { form.touch("items[2].code"); });
+
+        act(() => { form.removeItems("items", 0); });
+
+        expect(form.getFieldState("items[1].code").isTouched).toBe(true);
     });
 });

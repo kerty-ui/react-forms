@@ -20,27 +20,27 @@ const KertyBasicFormFieldExample = () => {
         <article>
             <FormField form={form} name="username">
                 {
-                    ({field, setFieldValue}) =>
+                    ({field}) =>
                     <div className="field">
                         <label>Username <RenderCount /></label>
                         <input
                             placeholder="Enter your username"
                             value={field.value ?? ""}
-                            onChange={(e) => setFieldValue(e.target.value)}
+                            onChange={(e) => field.setValue(e.target.value)}
                         />
                     </div>
                 }
             </FormField>
             <FormField form={form} name="password">
                 {
-                    ({field, setFieldValue}) =>
+                    ({field}) =>
                     <div className="field">
                         <label>Password <RenderCount /></label>
                         <input
                             type="password"
                             placeholder="Enter your password"
                             value={field.value ?? ""}
-                            onChange={(e) => setFieldValue(e.target.value)}
+                            onChange={(e) => field.setValue(e.target.value)}
                         />
                     </div>
                 }
@@ -81,27 +81,27 @@ export const KertyFormFieldExample = () => {
             codeHighlightedRows={[10, 21, 35, 40, 51]}>
             <FormField form={form} name="username">
                 {
-                    ({field, setFieldValue}) =>
+                    ({field}) =>
                         <div className="field">
                             <label>Username <RenderCount /></label>
                             <input
                                 placeholder="Enter your username"
                                 value={field.value ?? ""}
-                                onChange={(e) => setFieldValue(e.target.value)}
+                                onChange={(e) => field.setValue(e.target.value)}
                             />
                         </div>
                 }
             </FormField>
             <FormField form={form} name="password">
                 {
-                    ({field, setFieldValue}) =>
+                    ({field}) =>
                         <div className="field">
                             <label>Password <RenderCount /></label>
                             <input
                                 type="password"
                                 placeholder="Enter your password"
                                 value={field.value ?? ""}
-                                onChange={(e) => setFieldValue(e.target.value)}
+                                onChange={(e) => field.setValue(e.target.value)}
                             />
                         </div>
                 }

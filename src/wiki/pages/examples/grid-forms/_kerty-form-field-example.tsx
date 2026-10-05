@@ -29,6 +29,10 @@ const KertyFormFieldExample = () => {
         form.appendItems("rows", row);
     }, []);
 
+    const removeRow = useCallback((index: number) => {
+        form.removeItems("rows", index);
+    }, []);
+
     const appendRows = useCallback((count: number) => {
         form.appendItems("rows", Array.from({ length: count }, () => getDefaultRowData()));
     }, []);
@@ -64,12 +68,12 @@ const KertyFormFieldExample = () => {
                         <tbody>
                             <FormArrayField form={form} name="rows">
                                 {
-                                    ({field, removeItems}) => field.value?.map((row, index: number) => (
+                                    ({field}) => field.value?.map((row, index: number) => (
                                         <Row key={row.id}
                                              form={form}
                                              index={index}
                                              row={row}
-                                             removeRow={removeItems}
+                                             removeRow={removeRow}
                                         />
                                     ))
                                 }
@@ -106,12 +110,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell1\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -121,12 +125,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell2\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -136,12 +140,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell3\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -151,12 +155,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell4\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -166,12 +170,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell5\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -181,12 +185,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell6\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -196,12 +200,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell7\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -211,12 +215,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell8\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -226,12 +230,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell9\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -241,12 +245,12 @@ const Row = memo((props: {
             <td>
                 <FormField form={props.form} name={\`rows[$\{props.index\}].cell10\`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                 />
                                 <RenderCount />
                             </>
@@ -342,6 +346,10 @@ export const KertyFormFieldExample = () => {
         form.appendItems("rows", row);
     }, []);
 
+    const removeRow = useCallback((index: number) => {
+        form.removeItems("rows", index);
+    }, []);
+
     const appendRows = useCallback((count: number) => {
         form.appendItems("rows", Array.from({ length: count }, () => getDefaultRowData()));
     }, []);
@@ -390,12 +398,12 @@ export const KertyFormFieldExample = () => {
                         <tbody>
                             <FormArrayField form={form} name="rows">
                                 {
-                                    ({field, removeItems}) => field.value?.map((row, index: number) => (
+                                    ({field}) => field.value?.map((row, index: number) => (
                                         <Row key={row.id}
                                              form={form}
                                              index={index}
                                              row={row}
-                                             removeRow={removeItems}
+                                             removeRow={removeRow}
                                         />
                                     ))
                                 }
@@ -438,12 +446,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell1`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />
@@ -454,12 +462,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell2`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />
@@ -470,12 +478,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell3`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />
@@ -486,12 +494,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell4`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />
@@ -502,12 +510,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell5`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />
@@ -518,12 +526,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell6`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />
@@ -534,12 +542,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell7`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />
@@ -550,12 +558,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell8`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />
@@ -566,12 +574,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell9`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />
@@ -582,12 +590,12 @@ const Row = memo((props: {
             <td className="grid-cell">
                 <FormField form={props.form} name={`rows[${props.index}].cell10`}>
                     {
-                        ({field, setFieldValue}) =>
+                        ({field}) =>
                             <>
                                 <input
                                     type="number"
                                     value={field.value ?? 0}
-                                    onChange={(e) => setFieldValue(parseValue(e.target.value))}
+                                    onChange={(e) => field.setValue(parseValue(e.target.value))}
                                     className="grid-cell-input"
                                 />
                                 <RenderCount />

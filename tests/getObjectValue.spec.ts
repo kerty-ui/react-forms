@@ -216,13 +216,13 @@ describe("getObjectValue – data edge cases", () => {
 
 describe("getObjectValue – internal name", () => {
     const internalData = {
-        "#persons": "internal persons",
+        ".persons": "internal persons",
         persons: [
-            { "#": "internal first person", name: "Alice", "#name": "internal Alice" },
-            { name: "Bob", "#name": "internal Bob" },
+            { ".": "internal first person", name: "Alice", ".name": "internal Alice" },
+            { name: "Bob", ".name": "internal Bob" },
         ],
-        person: { name: "Carol", "#name": "internal Carol" },
-        matrix: [Object.assign(["a", { "#": "internal matrix cell" }], { "#": "internal matrix row" })],
+        person: { name: "Carol", ".name": "internal Carol" },
+        matrix: [Object.assign(["a", { ".": "internal matrix cell" }], { ".": "internal matrix row" })],
     };
 
     const getInternal = (path: string) => getObjectValueInternal(internalData, getFieldPath(path, true), true);
@@ -255,7 +255,7 @@ describe("getObjectValue – internal name", () => {
     });
 
     it("should not use internal names for intermediate parts", () => {
-        const obj = { person: { name: "Carol", "#name": "internal Carol" }, "#person": { "#name": "wrong" } };
+        const obj = { person: { name: "Carol", ".name": "internal Carol" }, ".person": { ".name": "wrong" } };
 
         const result = getObjectValueInternal(obj, getFieldPath("person.name", true), true);
 

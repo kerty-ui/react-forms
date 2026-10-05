@@ -174,6 +174,7 @@ export class Validator<TData = any> implements IValidator<TData> {
             ctx: {
                 data: ctx.data,
                 parent: undefined,
+                parentContext: undefined,
                 value: ctx.data,
                 fieldName: "",
             },
@@ -210,20 +211,19 @@ export class Validator<TData = any> implements IValidator<TData> {
                     const lastIndex = visitsAllItems ? items.length - 1 : onPathIndex;
 
                     if (entry.rules != null) {
-                        if (visitsAllItems || matchedParts + 1 === changedPath.length) {
-                            for (let index = firstIndex; index <= lastIndex; index++) {
-                                this.#validateField(
-                                    ctx.ruleSet,
-                                    {
-                                        data: nodeCtx.data,
-                                        parent: nodeCtx.parent,
-                                        value: items[index],
-                                        fieldName: `${nodeCtx.fieldName}[${index}]`,
-                                    },
-                                    entry.rules,
-                                    recordEmptyResults,
-                                    validationsResult);
-                            }
+                        for (let index = firstIndex; index <= lastIndex; index++) {
+                            this.#validateField(
+                                ctx.ruleSet,
+                                {
+                                    data: nodeCtx.data,
+                                    parent: nodeCtx.parent,
+                                    parentContext: nodeCtx,
+                                    value: items[index],
+                                    fieldName: `${nodeCtx.fieldName}[${index}]`,
+                                },
+                                entry.rules,
+                                recordEmptyResults,
+                                validationsResult);
                         }
 
                         continue;
@@ -244,6 +244,7 @@ export class Validator<TData = any> implements IValidator<TData> {
                             ctx: {
                                 data: nodeCtx.data,
                                 parent: nodeCtx.parent,
+                                parentContext: nodeCtx,
                                 value,
                                 fieldName: childNode.isArray ? itemFieldName : itemFieldName + ".",
                             },
@@ -265,12 +266,13 @@ export class Validator<TData = any> implements IValidator<TData> {
                     : changedPath[matchedParts].name === entry.propName ? matchedParts + 1 : OFF_PATH;
 
                 if (entry.rules != null) {
-                    if (entryMatchedParts === changedPath.length || entry.rules.runsForAnyChange) {
+                    if (entryMatchedParts !== OFF_PATH || entry.rules.runsForAnyChange) {
                         this.#validateField(
                             ctx.ruleSet,
                             {
                                 data: nodeCtx.data,
                                 parent: nodeCtx.value,
+                                parentContext: nodeCtx,
                                 value: nodeCtx.value?.[entry.propName],
                                 fieldName: nodeCtx.fieldName + entry.propName,
                             },
@@ -298,6 +300,7 @@ export class Validator<TData = any> implements IValidator<TData> {
                     ctx: {
                         data: nodeCtx.data,
                         parent: nodeCtx.value,
+                        parentContext: nodeCtx,
                         value,
                         fieldName: childNode.isArray
                             ? nodeCtx.fieldName + entry.propName

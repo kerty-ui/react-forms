@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import {
     FormArrayField,
     FormField,
@@ -12,6 +12,7 @@ import {
     ValidationResult,
     shallowEqual,
     useDataWatch,
+    useArrayField,
     useField,
     useFieldState,
     useFieldValue,
@@ -208,6 +209,100 @@ describe("useField", () => {
         act(() => form.current.applyFieldValidationResult("username", new ValidationResult().add({ text: "Taken" })));
 
         expect(screen.getByTestId("message").textContent).toBe("Taken");
+    });
+});
+
+describe("useField – identity of the returned field when the field is unchanged", () => {
+    const renderRecordedField = () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: { username: "bob" } });
+        const renders: any[] = [];
+        const Field = (_: { tick: number }) => {
+            const [field] = useField({ form, name: "username" });
+            renders.push(field);
+            return null;
+        };
+        const view = render(<Field tick={0} />);
+        return { form, renders, rerender: () => view.rerender(<Field tick={1} />) };
+    };
+
+    it("should keep the setValue function when the component re-renders", () => {
+        const { renders, rerender } = renderRecordedField();
+
+        rerender();
+
+        expect(renders[1].setValue).toBe(renders[0].setValue);
+    });
+
+    it("should keep the touch function when the component re-renders", () => {
+        const { renders, rerender } = renderRecordedField();
+
+        rerender();
+
+        expect(renders[1].touch).toBe(renders[0].touch);
+    });
+
+    it("should keep the field object when the component re-renders", () => {
+        const { renders, rerender } = renderRecordedField();
+
+        rerender();
+
+        expect(renders[1]).toBe(renders[0]);
+    });
+
+    it("should return a new field object when the field value changes", () => {
+        const { form, renders } = renderRecordedField();
+
+        act(() => form.setFieldValue("username", "alice"));
+
+        expect(renders[renders.length - 1]).not.toBe(renders[0]);
+    });
+
+    it("should not re-render a memo child that receives setValue when the parent re-renders", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: { username: "bob" } });
+        let childRenders = 0;
+        const Input = memo((_: { onChange: (value: string) => void }) => {
+            childRenders++;
+            return null;
+        });
+        const Field = (_: { tick: number }) => {
+            const [field] = useField({ form, name: "username" });
+            return <Input onChange={field.setValue} />;
+        };
+        const view = render(<Field tick={0} />);
+
+        view.rerender(<Field tick={1} />);
+
+        expect(childRenders).toBe(1);
+    });
+});
+
+describe("useArrayField – identity of the returned field when the field is unchanged", () => {
+    const renderRecordedArrayField = () => {
+        const form = new KertyForm<ListForm>({ data: { items: ["a"] } });
+        const renders: any[] = [];
+        const Field = (_: { tick: number }) => {
+            const [field] = useArrayField({ form, name: "items" });
+            renders.push(field);
+            return null;
+        };
+        const view = render(<Field tick={0} />);
+        return { renders, rerender: () => view.rerender(<Field tick={1} />) };
+    };
+
+    it("should keep the appendItems function when the component re-renders", () => {
+        const { renders, rerender } = renderRecordedArrayField();
+
+        rerender();
+
+        expect(renders[1].appendItems).toBe(renders[0].appendItems);
+    });
+
+    it("should keep the field object when the component re-renders", () => {
+        const { renders, rerender } = renderRecordedArrayField();
+
+        rerender();
+
+        expect(renders[1]).toBe(renders[0]);
     });
 });
 

@@ -61,6 +61,22 @@ describe("Validations.IsTextEmptyOrWhitespace", () => {
     it("should return the opposite result when IsTextNotEmptyOrWhitespace is called", () => {
         expect(Validations.IsTextNotEmptyOrWhitespace("   x")).toBe(true);
     });
+
+    it.each([
+        ["U+1680 ogham space mark", " "],
+        ["U+2028 line separator", " "],
+        ["U+2029 paragraph separator", " "],
+        ["U+202F narrow no-break space", " "],
+        ["U+205F medium mathematical space", " "],
+        ["U+3000 ideographic space", "　"],
+        ["U+FEFF zero width no-break space", "﻿"],
+    ])("should return true when the text holds only %s", (_label, value) => {
+        expect(Validations.IsTextEmptyOrWhitespace(value)).toBe(true);
+    });
+
+    it("should return false when the text holds a zero width space, which is not whitespace", () => {
+        expect(Validations.IsTextEmptyOrWhitespace("​")).toBe(false);
+    });
 });
 
 describe("Validations.IsArrayEmpty", () => {

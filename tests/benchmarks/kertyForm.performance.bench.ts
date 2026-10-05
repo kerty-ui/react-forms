@@ -1,7 +1,7 @@
 import { bench, describe } from "vitest";
-import { KertyForm } from "../../src/lib";
 import {
     FieldValidations,
+    KertyForm,
     Validator,
     ValidationResult,
     Severity,
@@ -758,3 +758,51 @@ describe("reset – variants at 1000 rows (subscribed)", () => {
         validatedForm.reset();
     });
 });
+
+// ── field entry creation ───────────────────────────────────────────────────
+
+// A field gets its entry on first use and loses it when its last listener
+// unsubscribes while its state is default, so subscribing and unsubscribing
+// 1000 fields creates and prunes 1000 entries per iteration. Names are parsed
+// on the first iteration only. In "entries kept" every field also holds a
+// permanent listener, so the same calls create and prune nothing; the gap
+// between the two rows is the cost of creating and pruning the entries.
+const ENTRY_PATHS = [
+    {
+        label: "flat grid cells (rows[i].cellJ)",
+        names: Array.from({ length: 1_000 }, (_, i) => `rows[${Math.floor(i / CELLS_PER_ROW)}].cell${i % CELLS_PER_ROW}`),
+    },
+    {
+        label: "nested array cells (orders[i].lines[j].qty)",
+        names: Array.from({ length: 1_000 }, (_, i) => `orders[${Math.floor(i / 10)}].lines[${i % 10}].qty`),
+    },
+    {
+        label: "deep object paths (aI.bJ.cK.value)",
+        names: Array.from({ length: 1_000 }, (_, i) => `a${i % 10}.b${Math.floor(i / 10) % 10}.c${Math.floor(i / 100)}.value`),
+    },
+];
+
+const subscribeAndUnsubscribe = (form: KertyForm<any>, names: string[]) => {
+    const unsubscribes = names.map(name => form.addFieldListener(name, noop));
+    for(const unsubscribe of unsubscribes) {
+        unsubscribe();
+    }
+};
+
+for(const { label, names } of ENTRY_PATHS) {
+    describe(`field entry creation – 1000 fields, ${label}`, () => {
+        const createdForm = new KertyForm<any>({ data: {} });
+        const keptForm = new KertyForm<any>({ data: {} });
+        for(const name of names) {
+            keptForm.addFieldListener(name, noop);
+        }
+
+        bench("entries created and pruned", () => {
+            subscribeAndUnsubscribe(createdForm, names);
+        });
+
+        bench("entries kept (subscription overhead only)", () => {
+            subscribeAndUnsubscribe(keptForm, names);
+        });
+    });
+}

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { getFieldPath, INTERNAL_NAME_PREFIX } from "../src/lib/utils/getFieldPath";
+import { afterEach, describe, expect, it } from "vitest";
+import { getFieldPath, INTERNAL_NAME_PREFIX, setInternalNamePrefix } from "../src/lib/utils/getFieldPath";
 import { type FieldPathPart } from "../src/lib";
 
 const expectPath = (fieldName: string, expected: FieldPathPart[]) => {
@@ -487,10 +487,10 @@ describe("getFieldPath – complex real-world examples", () => {
 
 describe("getFieldPath – internal name", () => {
     it.each([
-        ["name", "#name"],
-        ["person.name", "#name"],
-        ["orders[0].lines[2].sku", "#sku"],
-        ["items[]", "#items"],
+        ["name", ".name"],
+        ["person.name", ".name"],
+        ["orders[0].lines[2].sku", ".sku"],
+        ["items[]", ".items"],
     ])("should set the internal name on the last part when %s is parsed with includeInternalName", (fieldName, expected) => {
         const path = getFieldPath(fieldName, true);
 
@@ -506,7 +506,7 @@ describe("getFieldPath – internal name", () => {
     it("should set an internal name on intermediate parts when parsed with includeInternalName", () => {
         const path = getFieldPath("person.address.city", true);
 
-        expect(path.slice(0, -1).map((part) => part.internalName)).toEqual(["#person", "#address"]);
+        expect(path.slice(0, -1).map((part) => part.internalName)).toEqual([".person", ".address"]);
     });
 
     it("should not set an internal name when the last part is an array item", () => {
@@ -518,10 +518,10 @@ describe("getFieldPath – internal name", () => {
     it("should not set an internal name for array items", () => {
         const path = getFieldPath("items[0][1].childItems[0][1]", true);
 
-        expect(path[0].internalName).toBe("#items");
+        expect(path[0].internalName).toBe(".items");
         expect(path[1].internalName).toBeUndefined();
         expect(path[2].internalName).toBeUndefined();
-        expect(path[3].internalName).toBe("#childItems");
+        expect(path[3].internalName).toBe(".childItems");
         expect(path[4].internalName).toBeUndefined();
         expect(path[5].internalName).toBeUndefined();
     });
@@ -536,5 +536,25 @@ describe("getFieldPath – internal name", () => {
         const path = getFieldPath(null as unknown as string, true);
 
         expect(path).toEqual([]);
+    });
+});
+
+describe("setInternalNamePrefix", () => {
+    afterEach(() => {
+        setInternalNamePrefix(".");
+    });
+
+    it("should use the new prefix for internal names when the prefix is changed", () => {
+        setInternalNamePrefix("~");
+
+        const path = getFieldPath("person.name", true);
+
+        expect(path.map(part => part.internalName)).toEqual(["~person", "~name"]);
+    });
+
+    it("should expose the new prefix when the prefix is changed", () => {
+        setInternalNamePrefix("~");
+
+        expect(INTERNAL_NAME_PREFIX).toBe("~");
     });
 });
