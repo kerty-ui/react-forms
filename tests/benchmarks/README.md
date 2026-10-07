@@ -105,5 +105,6 @@ ratio should not be trusted without a rerun on an idle machine.
 | `removeObjectValue.performance.bench.ts` | Immutable removal vs `set(undefined)`, array splice position, data-size scaling |
 | `isEqual.performance.bench.ts` | Primitives, arrays, objects, dates, circular refs, `treatNullAsDefault` |
 | `kertyForm.performance.bench.ts` | `KertyForm.setFieldValue` / `prependItems` / `insertItems` / `validate` / `applyValidationResults` / `getInvalidFields` / `reset` / `updateConfiguration` by form size, with and without field listeners |
+| `messageDriven.performance.bench.ts` | `KertyForm.setFieldValue` with a `messageDriven` validator: one message toggling among many unchanged ones, by row count, with snapshot and no-op listeners, against the validator alone |
 | `validator.performance.bench.ts` | `Validator.validate` scoped to a changed field by form size, and scope variants (cell, row, collection, root field, full form) |
 | `arrayRender.performance.bench.tsx` | Re-render cost of one name edit in a 1000-row list: `useField(persons)` with plain vs memo rows, `useDataWatch(length)` baseline (`npm run bench:react`) |

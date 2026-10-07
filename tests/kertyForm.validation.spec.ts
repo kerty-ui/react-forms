@@ -1053,6 +1053,71 @@ describe("KertyForm – messageDriven revalidation on change", () => {
 
         expect(confirmPasswordCalls).toBe(before + 1);
     });
+
+    it("should not notify another field's listener when a change keeps that field's message", () => {
+        const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator: requiredLoginMessageValidator() });
+        let passwordCalls = 0;
+        form.addFieldListener("username", () => { });
+        form.addFieldListener("password", () => { passwordCalls++; });
+        form.validate();
+        const before = passwordCalls;
+
+        form.setFieldValue("username", "bob");
+
+        expect(passwordCalls).toBe(before);
+    });
+
+    it("should keep another field's snapshot when a change keeps that field's message", () => {
+        const form = mountedForm(requiredLoginMessageValidator());
+        const getPasswordSnapshot = form.getFieldSnapshot("password");
+        form.validate();
+        const before = getPasswordSnapshot();
+
+        form.setFieldValue("username", "bob");
+
+        expect(getPasswordSnapshot()).toBe(before);
+    });
+
+    it.each([
+        ["text", "Password is too short", Severity.Error],
+        ["severity", "Password is required", Severity.Warning],
+    ] as const)("should notify another field's listener when a change alters that field's message %s", (_, text, severity) => {
+        const form = new KertyForm<Partial<LoginForm>>({
+            data: {},
+            validator: new SingleMessageDrivenValidator<Partial<LoginForm>>((result, { data }) => {
+                result.setFieldMessage("password", data.username ? text : "Password is required", data.username ? severity : Severity.Error);
+            }),
+        });
+        let passwordCalls = 0;
+        form.addFieldListener("username", () => { });
+        form.addFieldListener("password", () => { passwordCalls++; });
+        form.validate();
+        const before = passwordCalls;
+
+        form.setFieldValue("username", "bob");
+
+        expect(passwordCalls).toBe(before + 1);
+    });
+
+    it("should notify a nested array item field's listener when a change clears that field's message", () => {
+        type ItemsForm = { flag: string; items: { name: string }[] };
+        const form = new KertyForm<ItemsForm>({
+            data: { flag: "", items: [{ name: "" }, { name: "" }] },
+            validator: new SingleMessageDrivenValidator<ItemsForm>((result, { data }) => {
+                if (!data.flag) result.setFieldMessage("items[1].name", "Name is required");
+            }),
+        });
+        let nameCalls = 0;
+        form.addFieldListener("flag", () => { });
+        form.addFieldListener("items[0].name", () => { });
+        form.addFieldListener("items[1].name", () => { nameCalls++; });
+        form.validate();
+        const before = nameCalls;
+
+        form.setFieldValue("flag", "on");
+
+        expect(nameCalls).toBe(before + 1);
+    });
 });
 
 describe("KertyForm – messageDriven validation of a field mounted after validate", () => {

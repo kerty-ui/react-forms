@@ -149,6 +149,7 @@ class FieldEntry {
     lastPartName: string;
     state: FieldState = defaultFieldState;
     validationResult?: IValidationResult | undefined = undefined;
+    validationRun: number = 0;
 
     constructor(path: FieldPathPart[]) {
         this.lastPartName = path[path.length - 1].name;
@@ -278,6 +279,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #dirtyCount = 0;
     #invalidCount = 0;
     #validatedCount = 0;
+    #validationRun = 0;
     #listeners = new Set<FormListener>();
 
     constructor(options: FormOptions<TData>) {
@@ -1367,6 +1369,56 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
+    #clearValidationResultsOutsideRun(node: Record<string, unknown>, name: string, listenerOptions: NotifyListenerOptions) {
+        if(Array.isArray(node)) {
+            const itemEntry = (node as ItemNode)[INTERNAL_NAME_PREFIX];
+            if(itemEntry !== undefined && this.#hasValidationResultOutsideRun(itemEntry)) {
+                this.#clearFieldValidationResult(itemEntry, name, listenerOptions);
+            }
+
+            for(let i = 0; i < node.length; i++) {
+                const itemNode = node[i];
+                if(itemNode != null) {
+                    this.#clearValidationResultsOutsideRun(itemNode as Record<string, unknown>, `${name}[${i}]`, listenerOptions);
+                }
+            }
+            return;
+        }
+
+        for(const key in node) {
+            const value = node[key];
+
+            if(value instanceof FieldEntry) {
+                if(!this.#hasValidationResultOutsideRun(value)) {
+                    continue;
+                }
+
+                this.#clearFieldValidationResult(
+                    value,
+                    key === INTERNAL_NAME_PREFIX ? name : name === "" ? value.lastPartName : `${name}.${value.lastPartName}`,
+                    listenerOptions);
+            }
+            else if(value != null) {
+                this.#clearValidationResultsOutsideRun(value as Record<string, unknown>, name === "" ? key : `${name}.${key}`, listenerOptions);
+            }
+        }
+    }
+
+    #hasValidationResultOutsideRun(entry: FieldEntry) {
+        return entry.validationRun !== this.#validationRun && (entry.validationResult != null || !entry.state.isValid);
+    }
+
+    #clearFieldValidationResult(entry: FieldEntry, name: string, listenerOptions: NotifyListenerOptions) {
+        entry.validationResult = undefined;
+        this.#setFieldState(entry, {
+            ...entry.state,
+            isValid: true,
+            isValidated: true,
+        });
+        listenerOptions.formValidationChanged();
+        listenerOptions.addAffectedField(name);
+    }
+
     #setFieldState(entry: FieldEntry, state: FieldState) {
         const previousState = entry.state;
         if(previousState.isValid !== state.isValid) {
@@ -1414,6 +1466,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             ruleSet: this.#ruleSet,
         });
 
+        const validationRun = ++this.#validationRun;
+
         for (let [fieldName, validationResult] of validationResults) {
             if(fieldName == null || fieldName === "") {
                 continue;
@@ -1421,12 +1475,25 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
             const field = this.#getField(fieldName);
             const entry = this.#getFieldEntry(field);
-            const hasMessages = validationResult.messages.length > 0;
+            entry.validationRun = validationRun;
 
-            if(!hasMessages && entry.validationResult == null && entry.state.isValidated && entry.state.isValid) {
+            const messages = validationResult.messages;
+            const currentMessages = entry.validationResult?.messages;
+            let validationHasNotChanged = entry.state.isValidated && (currentMessages === undefined
+                ? messages.length === 0 && entry.state.isValid
+                : currentMessages.length === messages.length);
+            for(let i = 0; validationHasNotChanged && i < messages.length; i++) {
+                const message = messages[i];
+                const currentMessage = currentMessages![i];
+                validationHasNotChanged = message.text === currentMessage.text
+                    && (message.severity ?? Severity.Error) === (currentMessage.severity ?? Severity.Error);
+            }
+
+            if(validationHasNotChanged) {
                 continue;
             }
 
+            const hasMessages = messages.length > 0;
             entry.validationResult = hasMessages ? validationResult : undefined;
 
             this.#setFieldState(entry, {
@@ -1554,35 +1621,19 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         if(this.#validator != null) {
             if(entry.state.isValidated || this.#state.isValidated) {
                 if (this.#isMessageDrivenValidator) {
-                    if(this.#validatedCount > 0) {
-                        let isAnyFieldCleared = false;
-                        this.#processEntries(this.#fieldEntries, (validatedEntry) => {
-                            if(validatedEntry.validationResult == null && validatedEntry.state.isValid) {
-                                return;
-                            }
-
-                            validatedEntry.validationResult = undefined;
-                            this.#setFieldState(validatedEntry, {
-                                ...validatedEntry.state,
-                                isValid: true,
-                                isValidated: true,
-                            });
-                            isAnyFieldCleared = true;
+                    this.#validateField(field.name, listenerOptions);
+                    this.#clearValidationResultsOutsideRun(this.#fieldEntries as Record<string, unknown>, "", listenerOptions);
+                } else {
+                    if(entry.validationResult != null || !entry.state.isValid) {
+                        entry.validationResult = undefined;
+                        this.#setFieldState(entry, {
+                            ...entry.state,
+                            isValid: true,
                         });
-                        if(isAnyFieldCleared) {
-                            listenerOptions.formValidationChanged();
-                            listenerOptions.allFieldsAffected();
-                        }
                     }
-                } else if(entry.validationResult != null || !entry.state.isValid) {
-                    entry.validationResult = undefined;
-                    this.#setFieldState(entry, {
-                        ...entry.state,
-                        isValid: true,
-                    });
-                }
 
-                this.#validateField(field.name, listenerOptions);
+                    this.#validateField(field.name, listenerOptions);
+                }
             }
         }
         else if(entry.state.isValidated) {
