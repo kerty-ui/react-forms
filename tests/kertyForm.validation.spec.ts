@@ -425,6 +425,78 @@ describe("KertyForm – fieldDriven revalidation after a passing validate", () =
     });
 });
 
+// ─── on-change revalidation disabled ─────────────────────────────────────────
+
+const validatedFormWithoutChangeValidation = (validator: any, data: Partial<LoginForm> = {}) => {
+    const form = new KertyForm<Partial<LoginForm>>({ data, validator, validateOnValueChange: false });
+    form.addFieldListener("username", () => { });
+    form.addFieldListener("password", () => { });
+    form.validate();
+    return form;
+};
+
+describe("KertyForm – validateOnValueChange disabled", () => {
+    it("should keep the field message when a fieldDriven field becomes valid", () => {
+        const form = validatedFormWithoutChangeValidation(requiredLoginValidator());
+
+        form.setFieldValue("username", "bob");
+
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
+    });
+
+    it("should not flag a fieldDriven field when it is cleared after passing validation", () => {
+        const form = validatedFormWithoutChangeValidation(requiredLoginValidator(), { username: "bob", password: "pw" });
+
+        form.setFieldValue("username", "");
+
+        expect(form.getValidationMessage("username")).toBeUndefined();
+    });
+
+    it("should keep the form valid when a fieldDriven field is cleared after passing validation", () => {
+        const form = validatedFormWithoutChangeValidation(requiredLoginValidator(), { username: "bob", password: "pw" });
+
+        form.setFieldValue("username", "");
+
+        expect(form.getState().isValid).toBe(true);
+    });
+
+    it("should keep the field message when a messageDriven field becomes valid", () => {
+        const form = validatedFormWithoutChangeValidation(requiredLoginMessageValidator());
+
+        form.setFieldValue("username", "bob");
+
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
+    });
+
+    it("should apply the changed value when validate is called after a change", () => {
+        const form = validatedFormWithoutChangeValidation(requiredLoginValidator());
+        form.setFieldValue("username", "bob");
+
+        form.validate();
+
+        expect(form.getValidationMessage("username")).toBeUndefined();
+    });
+
+    it("should keep the field message when validation on change was disabled at runtime", () => {
+        const form = mountedForm(requiredLoginValidator());
+        form.validate();
+        form.updateConfiguration({ validateOnValueChange: false });
+
+        form.setFieldValue("username", "bob");
+
+        expect(form.getValidationMessage("username")?.text).toBe("Username is required");
+    });
+
+    it("should clear the field message when validation on change was re-enabled at runtime", () => {
+        const form = validatedFormWithoutChangeValidation(requiredLoginValidator());
+        form.updateConfiguration({ validateOnValueChange: true });
+
+        form.setFieldValue("username", "bob");
+
+        expect(form.getValidationMessage("username")).toBeUndefined();
+    });
+});
+
 // ─── dependent and conditional fields on change ──────────────────────────────
 
 describe("KertyForm – dependent fields on change", () => {

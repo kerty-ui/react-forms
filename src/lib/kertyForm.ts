@@ -124,6 +124,7 @@ export const defaultFormConfig = {
     clearFormValidationResultsOnChange: true,
     keepValidationResultsWithoutListeners: true,
     cacheValidationResult: true,
+    validateOnValueChange: true,
 } as Required<FormConfig>
 
 class FieldInfo implements IFieldInfo {
@@ -263,6 +264,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #clearFormValidationResultsOnChange: boolean = true;
     #keepValidationResultsWithoutListeners: boolean = true;
     #cacheValidationResult: boolean = true;
+    #validateOnValueChange: boolean = true;
 
     #initialData: TData;
     #data: TData;
@@ -315,6 +317,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
         if(config.cacheValidationResult != null) {
             this.#cacheValidationResult = config.cacheValidationResult;
+        }
+        if(config.validateOnValueChange != null) {
+            this.#validateOnValueChange = config.validateOnValueChange;
         }
 
         if(this.#dirtyCheckEnabled === dirtyCheckEnabled && this.#dirtyCheckNullAsDefault === dirtyCheckNullAsDefault) {
@@ -1619,7 +1624,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
 
         if(this.#validator != null) {
-            if(entry.state.isValidated || this.#state.isValidated) {
+            if(this.#validateOnValueChange && (entry.state.isValidated || this.#state.isValidated)) {
                 if (this.#isMessageDrivenValidator) {
                     this.#validateField(field.name, listenerOptions);
                     this.#clearValidationResultsOutsideRun(this.#fieldEntries as Record<string, unknown>, "", listenerOptions);
