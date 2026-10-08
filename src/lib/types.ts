@@ -509,6 +509,10 @@ export type FormConfig = {
      * Whether `validate` reuses its last result while nothing has changed; `true` by default.
      */
     cacheValidationResult?: boolean;
+    /**
+     * Whether changing a value validates the field and the form; `true` by default.
+     */
+    validateOnValueChange?: boolean;
 }
 
 /**

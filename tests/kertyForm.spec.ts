@@ -90,6 +90,7 @@ describe("KertyForm – configuration", () => {
             clearFormValidationResultsOnChange: true,
             keepValidationResultsWithoutListeners: true,
             cacheValidationResult: true,
+            validateOnValueChange: true,
         });
     });
 
