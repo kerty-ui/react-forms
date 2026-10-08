@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { act, render, screen } from "@testing-library/react";
-import { memo, useRef } from "react";
+import { StrictMode, memo, useRef } from "react";
 import {
     FormArrayField,
     FormField,
@@ -1300,5 +1300,38 @@ describe("useField – parent notification", () => {
         act(() => form.current.setFieldValue("rows[0].text", "b"));
 
         expect(renderCountOf("row")).toBe(before + 1);
+    });
+});
+
+describe("useField – StrictMode remount onto a moved array item", () => {
+    type ReasonsForm = { reasons: { code?: string; description?: string }[] };
+
+    const Description = ({ f, index }: { f: IKertyForm<ReasonsForm>; index: number }) => {
+        useField({ form: f, name: `reasons[${index}].description` });
+        return null;
+    };
+
+    const Reason = ({ f, index }: { f: IKertyForm<ReasonsForm>; index: number }) => {
+        const code = useDataWatch(f, d => d.reasons[index].code);
+        return code === "85" ? <Description f={f} index={index} /> : null;
+    };
+
+    it("should keep the touched state of a moved item field when its component mounts at the new index", () => {
+        const form = { current: null as any as IKertyForm<ReasonsForm> };
+        const Reasons = ({ f }: { f: IKertyForm<ReasonsForm> }) => {
+            const [reasons] = useArrayField({ form: f, name: "reasons" });
+            return <>{(reasons.value ?? []).map((_, index) => <Reason key={index} f={f} index={index} />)}</>;
+        };
+        const Component = () => {
+            const f = useForm<ReasonsForm>({ data: { reasons: [{}, {}, {}, {}, { code: "85" }] } });
+            form.current = f;
+            return <Reasons f={f} />;
+        };
+        render(<StrictMode><Component /></StrictMode>);
+        act(() => form.current.touch("reasons[4].description"));
+
+        act(() => form.current.removeItems("reasons", 0));
+
+        expect(form.current.getFieldState("reasons[3].description").isTouched).toBe(true);
     });
 });

@@ -1267,12 +1267,13 @@ describe("KertyForm – validation after the last listener of a validated field 
         return { form, unsubscribe };
     };
 
-    it("should run the validator again when the results are not kept without listeners", () => {
+    it("should run the validator again when the results are not kept without listeners", async () => {
         const validator = countingValidator();
         const form = new KertyForm<Partial<LoginForm>>({ data: {}, validator, keepValidationResultsWithoutListeners: false });
         const unsubscribe = form.addFieldListener("username", () => { });
         form.validate();
         unsubscribe();
+        await Promise.resolve();
 
         form.validate();
 
@@ -1609,12 +1610,13 @@ describe("KertyForm.getValidationResult", () => {
         expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
-    it("should stop returning the result once the field unsubscribes when field state is not kept without listeners", () => {
+    it("should stop returning the result once the field unsubscribes when field state is not kept without listeners", async () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: {}, keepValidationResultsWithoutListeners: false });
         const unsubscribe = form.addFieldListener("username", () => { });
         form.applyFieldValidationResult("username", error("Taken"));
 
         unsubscribe();
+        await Promise.resolve();
 
         expect(form.getValidationMessage("username")).toBeUndefined();
     });
@@ -2295,12 +2297,13 @@ describe("KertyForm.getInvalidFields", () => {
         expect(form.getInvalidFields()).toEqual([]);
     });
 
-    it("should not return the field once its listener unsubscribes when field state is not kept without listeners", () => {
+    it("should not return the field once its listener unsubscribes when field state is not kept without listeners", async () => {
         const form = new KertyForm<Partial<LoginForm>>({ data: {}, keepValidationResultsWithoutListeners: false });
         const unsubscribe = form.addFieldListener("username", () => { });
         form.applyFieldValidationResult("username", error("Taken"));
 
         unsubscribe();
+        await Promise.resolve();
 
         expect(form.getInvalidFields()).toEqual([]);
     });

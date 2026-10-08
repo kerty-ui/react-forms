@@ -993,25 +993,39 @@ describe("KertyForm – field state without listeners", () => {
         expect(form.getValidationMessage("email")?.text).toBe("Email is required");
     });
 
-    it("should make the form valid when the last listener of an invalid field unsubscribes and results are not kept", () => {
+    it("should make the form valid when the last listener of an invalid field unsubscribes and results are not kept", async () => {
         const form = new KertyForm<any>({ data: { email: "" }, keepValidationResultsWithoutListeners: false });
         const unsubscribe = register(form, "email");
         form.applyFieldValidationResult("email", error("Email is required"));
 
         unsubscribe();
+        await Promise.resolve();
 
         expect(form.getState().isValid).toBe(true);
     });
 
-    it.each([true, false])("should reset the touched state when the last listener unsubscribes (keep results: %s)", keepValidationResultsWithoutListeners => {
+    it.each([true, false])("should reset the touched state when the last listener unsubscribes (keep results: %s)", async keepValidationResultsWithoutListeners => {
         const form = new KertyForm<any>({ data: { email: "" }, keepValidationResultsWithoutListeners });
         const unsubscribe = register(form, "email");
         form.touch("email");
         unsubscribe();
+        await Promise.resolve();
 
         register(form, "email");
 
         expect(form.getFieldState("email").isTouched).toBe(false);
+    });
+
+    it.each([true, false])("should keep the touched state when the field is subscribed again before the last unsubscribe is released (keep results: %s)", async keepValidationResultsWithoutListeners => {
+        const form = new KertyForm<any>({ data: { email: "" }, keepValidationResultsWithoutListeners });
+        const unsubscribe = register(form, "email");
+        form.touch("email");
+
+        unsubscribe();
+        register(form, "email");
+        await Promise.resolve();
+
+        expect(form.getFieldState("email").isTouched).toBe(true);
     });
 
     it.each([true, false])("should keep the form dirty when the last listener of a dirty field unsubscribes (keep results: %s)", keepValidationResultsWithoutListeners => {

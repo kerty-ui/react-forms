@@ -417,8 +417,16 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             this.#listeners.delete(entry);
 
             field.listenerCount -= 1;
-            if(field.listenerCount === 0) {
-                this.#listenedFieldCount -= 1;
+            if(field.listenerCount !== 0) {
+                return;
+            }
+
+            this.#listenedFieldCount -= 1;
+
+            queueMicrotask(() => {
+                if(field.listenerCount !== 0) {
+                    return;
+                }
 
                 const fieldEntry = this.#getFieldEntry(field, false);
                 if(fieldEntry !== subscribedEntry) {
@@ -465,7 +473,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 }
 
                 this.#notifyListeners(listenerOptions);
-            }
+            });
         };
     }
 
