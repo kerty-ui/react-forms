@@ -1,7 +1,10 @@
 ﻿import { ValidationResult } from "./validationResult";
-import { Severity, type AutoFieldPath, type IValidationResult, type MessageSeverity } from "../types";
+import { getValidationResultNode } from "./validationResultTree";
+import { Severity, VALIDATION_RESULT, type AnyValidationResultTree, type AutoFieldPath, type MessageSeverity, type ValidationResultTree } from "../types";
 
-export class SingleMessageResults<TData> extends Map<string, IValidationResult> {
+export class SingleMessageResults<TData> {
+
+    readonly tree: ValidationResultTree<TData> = {} as ValidationResultTree<TData>;
 
     isValid: boolean = true;
 
@@ -9,27 +12,22 @@ export class SingleMessageResults<TData> extends Map<string, IValidationResult> 
         text: string,
         severity: MessageSeverity = Severity.Error,
     ) {
-        if(severity === Severity.Error) {
-            this.isValid = false;
-        }
-
-        this.set("", new ValidationResult().add({
-            text: text,
-            severity: severity,
-        }));
-
-        return this;
+        return this.#setMessage("", text, severity);
     }
 
     setFieldMessage<TPath extends string>(name: AutoFieldPath<TData, TPath>, text: string, severity: MessageSeverity = Severity.Error) {
+        return this.#setMessage(name, text, severity);
+    }
+
+    #setMessage(name: string, text: string, severity: MessageSeverity) {
         if(severity === Severity.Error) {
             this.isValid = false;
         }
 
-        this.set(name, new ValidationResult().set({
+        getValidationResultNode(this.tree as AnyValidationResultTree, name, true)![VALIDATION_RESULT] = new ValidationResult().set({
             text: text,
             severity: severity,
-        }));
+        });
 
         return this;
     }

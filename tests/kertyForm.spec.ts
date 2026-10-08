@@ -72,7 +72,7 @@ describe("KertyForm – construction", () => {
         const form = new KertyForm<LoginForm>({
             validator: () => {
                 called = true;
-                return { mode: "fieldDriven", validate: () => new Map() };
+                return { mode: "fieldDriven", validate: () => ({}) };
             },
         });
 

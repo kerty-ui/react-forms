@@ -1,9 +1,12 @@
 ﻿import { ValidationResult } from "./validationResult";
+import { getValidationResultNode } from "./validationResultTree";
 import {
     Severity,
-    type IValidationResult,
+    VALIDATION_RESULT,
+    type AnyValidationResultTree,
     type IValidator,
     type MessageSeverity,
+    type ValidationResultTree,
     type ValidatorContext,
     type ValidatorMode,
     type AutoFieldPath,
@@ -20,7 +23,7 @@ interface IValidationResultBuilder<TData> {
 
 class ValidationResultBuilder<TData> implements IValidationResultBuilder<TData> {
 
-    validationResult = new Map<string, IValidationResult>();
+    tree: AnyValidationResultTree = {};
 
     setFieldMessage<TPath extends string>(
         name: AutoFieldPath<TData, TPath>,
@@ -31,10 +34,10 @@ class ValidationResultBuilder<TData> implements IValidationResultBuilder<TData> 
             return;
         }
 
-        this.validationResult.set(name, new ValidationResult().add({
+        getValidationResultNode(this.tree, name, true)![VALIDATION_RESULT] = new ValidationResult().add({
             text: text,
             severity: severity,
-        }));
+        });
     }
 }
 
@@ -49,9 +52,9 @@ export class SingleMessageDrivenValidator<TData> implements IValidator<TData> {
 
     mode: ValidatorMode;
 
-    validate(ctx: ValidatorContext<TData>): Map<string, IValidationResult> {
+    validate(ctx: ValidatorContext<TData>): ValidationResultTree<TData> {
         const builder = new ValidationResultBuilder<TData>();
         this.#validate(builder, ctx);
-        return builder.validationResult;
+        return builder.tree as ValidationResultTree<TData>;
     }
 }

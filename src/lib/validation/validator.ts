@@ -1,12 +1,14 @@
 ﻿import { ValidationResult } from "./validationResult";
 import { getFieldPath } from "../utils/getFieldPath";
-import type {
-    IValidationResult,
-    MessageSeverity,
-    IValidator,
-    ValidatorMode,
-    ValidatorContext,
-    ValidationContext,
+import {
+    VALIDATION_RESULT,
+    type AnyValidationResultTree,
+    type MessageSeverity,
+    type IValidator,
+    type ValidationResultTree,
+    type ValidatorMode,
+    type ValidatorContext,
+    type ValidationContext,
 } from "./../types";
 
 type RawValidationsSchemaValue =
@@ -95,7 +97,23 @@ type ValidationFrame<TData> = {
     ctx: ValidationContext<TData, any>;
     node: CompiledNode<TData>;
     matchedParts: number;
+    parent: ValidationFrame<TData> | undefined;
+    key: string | number;
+    resultNode: AnyValidationResultTree | undefined;
 };
+
+function getFrameResultNode<TData>(frame: ValidationFrame<TData>): AnyValidationResultTree {
+    if (frame.resultNode === undefined) {
+        const parentNode = getFrameResultNode(frame.parent!);
+        frame.resultNode = parentNode[frame.key] ??= frame.node.isArray ? [] : {};
+    }
+    return frame.resultNode!;
+}
+
+function setChildResult(parentNode: AnyValidationResultTree, key: string | number, value: unknown, result: ValidationResult) {
+    const node: AnyValidationResultTree = parentNode[key] ??= Array.isArray(value) ? [] : {};
+    node[VALIDATION_RESULT] = result;
+}
 
 const OFF_PATH = -1;
 
@@ -156,9 +174,9 @@ export class Validator<TData = any> implements IValidator<TData> {
 
     readonly mode: ValidatorMode = "fieldDriven";
 
-    validate (ctx: ValidatorContext<TData>): Map<string, IValidationResult> {
+    validate (ctx: ValidatorContext<TData>): ValidationResultTree<TData> {
 
-        const validationsResult = new Map<string, ValidationResult>();
+        const tree: AnyValidationResultTree = {};
 
         // Each frame tracks how many parts of the changed field's path it has matched.
         // Matching all of them means the frame is the changed field or inside it;
@@ -180,10 +198,14 @@ export class Validator<TData = any> implements IValidator<TData> {
             },
             node: this.#root,
             matchedParts: 0,
+            parent: undefined,
+            key: "",
+            resultNode: tree,
         }];
 
         while (stack.length > 0) {
-            const { ctx: nodeCtx, node, matchedParts } = stack.pop()!;
+            const frame = stack.pop()!;
+            const { ctx: nodeCtx, node, matchedParts } = frame;
 
             if (node.isArray) {
 
@@ -212,18 +234,20 @@ export class Validator<TData = any> implements IValidator<TData> {
 
                     if (entry.rules != null) {
                         for (let index = firstIndex; index <= lastIndex; index++) {
-                            this.#validateField(
+                            const value = items[index];
+                            const result = this.#runValidations(
                                 ctx.ruleSet,
                                 {
                                     data: nodeCtx.data,
                                     parent: nodeCtx.parent,
                                     parentContext: nodeCtx,
-                                    value: items[index],
+                                    value,
                                     fieldName: `${nodeCtx.fieldName}[${index}]`,
                                 },
-                                entry.rules,
-                                recordEmptyResults,
-                                validationsResult);
+                                entry.rules.validations);
+                            if (result.messages.length > 0 || recordEmptyResults) {
+                                setChildResult(getFrameResultNode(frame), index, value, result);
+                            }
                         }
 
                         continue;
@@ -252,6 +276,9 @@ export class Validator<TData = any> implements IValidator<TData> {
                             matchedParts: matchedParts === changedPath.length
                                 ? matchedParts
                                 : index === onPathIndex ? matchedParts + 1 : OFF_PATH,
+                            parent: frame,
+                            key: index,
+                            resultNode: undefined,
                         });
                     }
                 }
@@ -267,18 +294,20 @@ export class Validator<TData = any> implements IValidator<TData> {
 
                 if (entry.rules != null) {
                     if (entryMatchedParts !== OFF_PATH || entry.rules.runsForAnyChange) {
-                        this.#validateField(
+                        const value = nodeCtx.value?.[entry.propName];
+                        const result = this.#runValidations(
                             ctx.ruleSet,
                             {
                                 data: nodeCtx.data,
                                 parent: nodeCtx.value,
                                 parentContext: nodeCtx,
-                                value: nodeCtx.value?.[entry.propName],
+                                value,
                                 fieldName: nodeCtx.fieldName + entry.propName,
                             },
-                            entry.rules,
-                            recordEmptyResults,
-                            validationsResult);
+                            entry.rules.validations);
+                        if (result.messages.length > 0 || recordEmptyResults) {
+                            setChildResult(getFrameResultNode(frame), entry.propName, value, result);
+                        }
                     }
 
                     continue;
@@ -308,23 +337,14 @@ export class Validator<TData = any> implements IValidator<TData> {
                     },
                     node: childNode,
                     matchedParts: entryMatchedParts,
+                    parent: frame,
+                    key: entry.propName,
+                    resultNode: undefined,
                 });
             }
         }
 
-        return validationsResult;
-    }
-
-    #validateField(
-        ruleSet: string | null | undefined,
-        ctx: ValidationContext<TData, any>,
-        rules: CompiledRules<TData>,
-        recordEmptyResult: boolean,
-        validationsResult: Map<string, ValidationResult>) {
-        const result = this.#runValidations(ruleSet, ctx, rules.validations);
-        if (result.messages.length > 0 || recordEmptyResult) {
-            validationsResult.set(ctx.fieldName, result);
-        }
+        return tree as ValidationResultTree<TData>;
     }
 
     #runValidations(

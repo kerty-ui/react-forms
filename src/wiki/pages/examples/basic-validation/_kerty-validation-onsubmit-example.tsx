@@ -43,7 +43,7 @@ const KertyValidationOnSubmitExample = () => {
             }
         }
 
-        form.applyValidationResults(result);
+        form.applyValidationResults(result.tree);
     }
     
     return (
@@ -133,7 +133,7 @@ const FieldMessage = (props: {
                 }
             }
     
-            form.applyValidationResults(result);
+            form.applyValidationResults(result.tree);
         }
         
         return (

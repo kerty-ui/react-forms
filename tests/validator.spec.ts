@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { FieldValidations, Validator, Validations, Severity, type IValidationResult } from "../src/lib";
+import { FieldValidations, Validator, Validations, Severity, type AnyValidationResultTree } from "../src/lib";
+import { resultNames, resultOf } from "./validationResultTree.helpers";
 
-const textsFor = (result: Map<string, IValidationResult>, field: string) =>
-    result.get(field)?.messages.map(m => m.text);
+const textsFor = (result: AnyValidationResultTree, field: string) =>
+    resultOf(result, field)?.messages.map(m => m.text);
 
-const firstTextFor = (result: Map<string, IValidationResult>, field: string) =>
-    result.get(field)?.messages[0]?.text;
+const firstTextFor = (result: AnyValidationResultTree, field: string) =>
+    resultOf(result, field)?.messages[0]?.text;
 
-const hasErrorFor = (result: Map<string, IValidationResult>, field: string) =>
-    result.get(field)?.has(Severity.Error);
+const hasErrorFor = (result: AnyValidationResultTree, field: string) =>
+    resultOf(result, field)?.has(Severity.Error);
 
 const required = (message: string) => ({
     check: (ctx: any) => Validations.IsTextEmpty(ctx.value),
@@ -41,7 +42,7 @@ describe("Validator.validate – full form", () => {
 
         const result = validator.validate({ data: { name: "John" } });
 
-        expect(result.has("name")).toBe(false);
+        expect((resultOf(result, "name") !== undefined)).toBe(false);
     });
 
     it("should validate every registered field when called without a field name", () => {
@@ -52,7 +53,7 @@ describe("Validator.validate – full form", () => {
 
         const result = validator.validate({ data: { name: "", surname: "" } });
 
-        expect([...result.keys()].sort()).toEqual(["name", "surname"]);
+        expect(resultNames(result).sort()).toEqual(["name", "surname"]);
     });
 
     it("should run a nested branch rule when its parent value is null", () => {
@@ -100,7 +101,7 @@ describe("Validator.validate – full form", () => {
 
         const result = validator.validate({ data: { items: { value: "value" } } });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 
     it("should skip array item rules when the array is absent from the data", () => {
@@ -110,7 +111,7 @@ describe("Validator.validate – full form", () => {
 
         const result = validator.validate({ data: {} });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 
     it("should skip nested array item rules when the array is absent from the data", () => {
@@ -124,7 +125,7 @@ describe("Validator.validate – full form", () => {
 
         const result = validator.validate({ data: {} });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 });
 
@@ -311,7 +312,7 @@ describe("Validator – nested structures", () => {
 
         const result = validator.validate({ data: { tags: ["ts", "", "js"] } });
 
-        expect([...result.keys()]).toEqual(["tags[1]"]);
+        expect(resultNames(result)).toEqual(["tags[1]"]);
     });
 
     it("should key the result by index and property when an array object field fails", () => {
@@ -323,7 +324,7 @@ describe("Validator – nested structures", () => {
 
         const result = validator.validate({ data: { items: [{ name: "a" }, { name: "" }] } });
 
-        expect([...result.keys()]).toEqual(["items[1].name"]);
+        expect(resultNames(result)).toEqual(["items[1].name"]);
     });
 
     it("should key the result by both indices when an inner array item fails", () => {
@@ -333,7 +334,7 @@ describe("Validator – nested structures", () => {
 
         const result = validator.validate({ data: { matrix: [["a", ""], [""]] } });
 
-        expect([...result.keys()].sort()).toEqual(["matrix[0][1]", "matrix[1][0]"]);
+        expect(resultNames(result).sort()).toEqual(["matrix[0][1]", "matrix[1][0]"]);
     });
 });
 
@@ -378,7 +379,7 @@ describe("Validator – rule options", () => {
 
         const result = validator.validate({ data: { age: null } });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 
     it("should run only the matching rule set when a rule set is active", () => {
@@ -474,7 +475,7 @@ describe("Validator – rule options", () => {
 
         const result = validator.validate({ data: { name: "John" } });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 });
 
@@ -510,7 +511,7 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { name: "", surname: "" }, fieldName: "name" });
 
-        expect(result.has("surname")).toBe(false);
+        expect((resultOf(result, "surname") !== undefined)).toBe(false);
     });
 
     it("should include a field marked hasDependency when another field changes", () => {
@@ -566,7 +567,7 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { items: ["", "b", ""] }, fieldName: "items[1]" });
 
-        expect([...result.keys()]).toEqual(["items[1]"]);
+        expect(resultNames(result)).toEqual(["items[1]"]);
     });
 
     it("should revalidate every item when the array rule carries a when condition", () => {
@@ -580,7 +581,7 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { items: ["", "b", ""] }, fieldName: "items[1]" });
 
-        expect([...result.keys()]).toEqual(["items[0]", "items[1]", "items[2]"]);
+        expect(resultNames(result)).toEqual(["items[0]", "items[1]", "items[2]"]);
     });
 
     it("should revalidate every item when the array rule is marked hasDependency", () => {
@@ -594,7 +595,7 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { items: ["", "b", ""] }, fieldName: "items[1]" });
 
-        expect([...result.keys()]).toEqual(["items[0]", "items[1]", "items[2]"]);
+        expect(resultNames(result)).toEqual(["items[0]", "items[1]", "items[2]"]);
     });
 
     it("should revalidate the array item field when that field changes", () => {
@@ -620,7 +621,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "items[1].name",
         });
 
-        expect([...result.keys()]).toEqual(["items[1].name"]);
+        expect(resultNames(result)).toEqual(["items[1].name"]);
     });
 
     it("should revalidate the item field at every index when it carries a when condition", () => {
@@ -639,7 +640,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "items[1].name",
         });
 
-        expect([...result.keys()].sort()).toEqual(["items[0].name", "items[1].name"]);
+        expect(resultNames(result).sort()).toEqual(["items[0].name", "items[1].name"]);
     });
 
     it("should revalidate the inner array item when a nested array item changes", () => {
@@ -692,7 +693,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "items[0].name",
         });
 
-        expect([...result.keys()]).toEqual(["items[0].name"]);
+        expect(resultNames(result)).toEqual(["items[0].name"]);
     });
 
     it("should skip a sibling field of the same array item when one field changes", () => {
@@ -708,7 +709,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "items[0].name",
         });
 
-        expect([...result.keys()]).toEqual(["items[0].name"]);
+        expect(resultNames(result)).toEqual(["items[0].name"]);
     });
 
     it("should return no results when the changed field has no registered rules", () => {
@@ -718,7 +719,7 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { name: "" }, fieldName: "unknownField" });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 
     it("should skip a field whose name extends the changed field name when that field changes", () => {
@@ -729,7 +730,7 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { name: "", nameExtra: "" }, fieldName: "name" });
 
-        expect([...result.keys()]).toEqual(["name"]);
+        expect(resultNames(result)).toEqual(["name"]);
     });
 
     it("should skip an item field whose name extends the changed item field name when that field changes", () => {
@@ -745,7 +746,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "items[0].name",
         });
 
-        expect([...result.keys()]).toEqual(["items[0].name"]);
+        expect(resultNames(result)).toEqual(["items[0].name"]);
     });
 
     it("should skip items whose index starts with the changed index when an array item changes", () => {
@@ -758,7 +759,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "items[1]",
         });
 
-        expect([...result.keys()]).toEqual(["items[1]"]);
+        expect(resultNames(result)).toEqual(["items[1]"]);
     });
 
     it("should revalidate every item when the whole primitive array changes", () => {
@@ -768,7 +769,7 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { tags: ["", "b"] }, fieldName: "tags" });
 
-        expect([...result.keys()]).toEqual(["tags[0]", "tags[1]"]);
+        expect(resultNames(result)).toEqual(["tags[0]", "tags[1]"]);
     });
 
     it("should revalidate every item when the object owning a primitive array changes", () => {
@@ -778,7 +779,7 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { post: { tags: ["", "b"] } }, fieldName: "post" });
 
-        expect([...result.keys()]).toEqual(["post.tags[0]", "post.tags[1]"]);
+        expect(resultNames(result)).toEqual(["post.tags[0]", "post.tags[1]"]);
     });
 
     it("should revalidate only the inner items of the changed row when a nested array row changes", () => {
@@ -791,7 +792,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "matrix[1]",
         });
 
-        expect([...result.keys()]).toEqual(["matrix[1][0]", "matrix[1][1]"]);
+        expect(resultNames(result)).toEqual(["matrix[1][0]", "matrix[1][1]"]);
     });
 
     it("should revalidate a when rule in every item of another array when an unrelated field changes", () => {
@@ -811,7 +812,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "title",
         });
 
-        expect([...result.keys()].sort()).toEqual(["rows[0].name", "rows[1].name", "title"]);
+        expect(resultNames(result).sort()).toEqual(["rows[0].name", "rows[1].name", "title"]);
     });
 
     it("should revalidate only rules that run for any change when the changed index is outside the array", () => {
@@ -822,7 +823,7 @@ describe("Validator.validate – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { title: "", items: ["", ""] }, fieldName: "items[5]" });
 
-        expect([...result.keys()]).toEqual(["title"]);
+        expect(resultNames(result)).toEqual(["title"]);
     });
 
     it("should revalidate the field rules when a path below that field changes", () => {
@@ -868,7 +869,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "items[1].from",
         });
 
-        expect([...result.keys()].sort()).toEqual(["items[1]", "items[1].from"]);
+        expect(resultNames(result).sort()).toEqual(["items[1]", "items[1].from"]);
     });
 
     it("should revalidate the rules of every ancestor when a deeply nested field changes", () => {
@@ -884,7 +885,7 @@ describe("Validator.validate – scoped to a changed field", () => {
             fieldName: "orders[0].lines[0].qty",
         });
 
-        expect([...result.keys()].sort()).toEqual(["orders", "orders[0].lines[0]"]);
+        expect(resultNames(result).sort()).toEqual(["orders", "orders[0].lines[0]"]);
     });
 });
 
@@ -909,7 +910,7 @@ describe("Validator – schema captured at construction", () => {
 
         const result = validator.validate({ data: { name: "", surname: "" }, fieldName: "name" });
 
-        expect(result.has("surname")).toBe(false);
+        expect((resultOf(result, "surname") !== undefined)).toBe(false);
     });
 
     it("should ignore a field added to the schema when the validator is already constructed", () => {
@@ -919,6 +920,6 @@ describe("Validator – schema captured at construction", () => {
 
         const result = validator.validate({ data: { name: "", surname: "" } });
 
-        expect([...result.keys()]).toEqual(["name"]);
+        expect(resultNames(result)).toEqual(["name"]);
     });
 });

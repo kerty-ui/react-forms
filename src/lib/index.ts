@@ -29,5 +29,6 @@ export * from "./validation/singleMessageResult";
 export * from "./validation/singleMessageResults";
 export * from "./validation/multiMessageResults";
 export * from "./validation/validatorBuilder";
+export { getValidationResult, setValidationResult } from "./validation/validationResultTree";
 
 export * from "./types";

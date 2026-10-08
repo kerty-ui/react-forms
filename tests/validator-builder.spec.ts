@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ValidationBuilder, ValidatorBuilder, Validations, Severity, type IValidationResult } from "../src/lib";
+import { ValidationBuilder, ValidatorBuilder, Validations, Severity, type AnyValidationResultTree } from "../src/lib";
+import { resultNames, resultOf } from "./validationResultTree.helpers";
 
 type SimpleModel = {
     name: string;
@@ -35,11 +36,11 @@ type DeepModel = {
     };
 };
 
-const textsFor = (result: Map<string, IValidationResult>, field: string) =>
-    result.get(field)?.messages.map(m => m.text);
+const textsFor = (result: AnyValidationResultTree, field: string) =>
+    resultOf(result, field)?.messages.map(m => m.text);
 
-const firstTextFor = (result: Map<string, IValidationResult>, field: string) =>
-    result.get(field)?.messages[0]?.text;
+const firstTextFor = (result: AnyValidationResultTree, field: string) =>
+    resultOf(result, field)?.messages[0]?.text;
 
 const isTextEmpty = (ctx: any) => Validations.IsTextEmpty(ctx.value);
 const isUnderage = (ctx: any) => Validations.IsLessThan(ctx.value, 18);
@@ -118,7 +119,7 @@ describe("ValidatorBuilder.setup", () => {
 
         const result = validator.validate({ data: { name: "", age: 10 } });
 
-        expect([...result.keys()].sort()).toEqual(["age", "name"]);
+        expect(resultNames(result).sort()).toEqual(["age", "name"]);
     });
 });
 
@@ -150,7 +151,7 @@ describe("ValidatorBuilder – root level paths", () => {
 
         const result = validator.validate({ data: { name: "John", age: 25 } });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 
     it("should expose the form data as both data and parent when the field is at the root", () => {
@@ -204,7 +205,7 @@ describe("ValidatorBuilder – array paths", () => {
 
         const result = validator.validate({ data: { tags: ["ts", "", ""], items: [] } });
 
-        expect([...result.keys()]).toEqual(["tags[1]", "tags[2]"]);
+        expect(resultNames(result)).toEqual(["tags[1]", "tags[2]"]);
     });
 
     it("should attach the message to the failing primitive item when the rule checks the item value", () => {
@@ -214,7 +215,7 @@ describe("ValidatorBuilder – array paths", () => {
 
         const result = validator.validate({ data: { numbers: [1, 2, 3] } });
 
-        expect([...result.keys()]).toEqual(["numbers[1]"]);
+        expect(resultNames(result)).toEqual(["numbers[1]"]);
         expect(firstTextFor(result, "numbers[1]")).toBe("number two is not allowed");
     });
 
@@ -225,7 +226,7 @@ describe("ValidatorBuilder – array paths", () => {
 
         const result = validator.validate({ data: { tags: [], items: [{ brand: "BMW", mark: "m" }, { brand: "", mark: "m" }] } });
 
-        expect([...result.keys()]).toEqual(["items[1].brand"]);
+        expect(resultNames(result)).toEqual(["items[1].brand"]);
     });
 
     it("should register both rules when two fields of the same array item are configured", () => {
@@ -238,7 +239,7 @@ describe("ValidatorBuilder – array paths", () => {
 
         const result = validator.validate({ data: { tags: [], items: [{ brand: "", mark: "" }] } });
 
-        expect([...result.keys()].sort()).toEqual(["items[0].brand", "items[0].mark"]);
+        expect(resultNames(result).sort()).toEqual(["items[0].brand", "items[0].mark"]);
     });
 
     it("should expose the item as parent when the rule targets an item field", () => {
@@ -263,7 +264,7 @@ describe("ValidatorBuilder – array paths", () => {
 
         const result = validator.validate({ data: { matrix: [["a", ""]], nested: { items: [] } } });
 
-        expect([...result.keys()]).toEqual(["matrix[0][1]"]);
+        expect(resultNames(result)).toEqual(["matrix[0][1]"]);
     });
 
     it("should keep both rules when the item rule is registered before the item field rule", () => {
@@ -316,7 +317,7 @@ describe("ValidatorBuilder – array paths", () => {
 
         const result = validator.validate({ data: { tags: [], items: [{ brand: "", mark: "" }] } });
 
-        expect([...result.keys()].sort()).toEqual(["items[0].brand", "items[0].mark"]);
+        expect(resultNames(result).sort()).toEqual(["items[0].brand", "items[0].mark"]);
     });
 
     it("should keep the rule on the array itself alongside a rule on its item fields", () => {
@@ -339,7 +340,7 @@ describe("ValidatorBuilder – array paths", () => {
 
         const result = validator.validate({ data: { matrix: [[{ x: "" }]] } });
 
-        expect([...result.keys()]).toEqual(["matrix[0][0].x"]);
+        expect(resultNames(result)).toEqual(["matrix[0][0].x"]);
     });
 
     it("should report the failure under the full path when the array is nested inside an object", () => {
@@ -349,7 +350,7 @@ describe("ValidatorBuilder – array paths", () => {
 
         const result = validator.validate({ data: { matrix: [], nested: { items: [{ label: "" }] } } });
 
-        expect([...result.keys()]).toEqual(["nested.items[0].label"]);
+        expect(resultNames(result)).toEqual(["nested.items[0].label"]);
     });
 });
 
@@ -365,7 +366,7 @@ describe("ValidatorBuilder – rule options", () => {
 
         const result = validator.validate({ data: { name: "", age: 20 } });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 
     it("should include the rule set rule alongside unscoped rules when its rule set is active", () => {
@@ -403,7 +404,7 @@ describe("ValidatorBuilder – rule options", () => {
 
         const result = validator.validate({ data: { name: "n", age: 200 } });
 
-        expect(result.get("age")?.has(Severity.Warning)).toBe(true);
+        expect(resultOf(result, "age")?.has(Severity.Warning)).toBe(true);
     });
 
     it("should preserve declaration order when several rules on a field fire", () => {
@@ -456,7 +457,7 @@ describe("ValidatorBuilder – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { name: "", age: 10 }, fieldName: "name" });
 
-        expect([...result.keys()]).toEqual(["name"]);
+        expect(resultNames(result)).toEqual(["name"]);
     });
 
     it("should also validate a dependent field when another field changes", () => {
@@ -483,7 +484,7 @@ describe("ValidatorBuilder – scoped to a changed field", () => {
 
         const result = validator.validate({ data: { tags: ["", "b"], items: [] }, fieldName: "tags[1]" });
 
-        expect([...result.keys()]).toEqual(["tags[1]"]);
+        expect(resultNames(result)).toEqual(["tags[1]"]);
     });
 
     it("should revalidate the item field when the item rule was registered first", () => {

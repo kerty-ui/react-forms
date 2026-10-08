@@ -1,9 +1,12 @@
 ﻿import { ValidationResult } from "./validationResult";
+import { getValidationResultNode } from "./validationResultTree";
 import {
     Severity,
-    type IValidationResult,
+    VALIDATION_RESULT,
+    type AnyValidationResultTree,
     type IValidator,
     type MessageSeverity,
+    type ValidationResultTree,
     type ValidatorContext,
     type ValidatorMode,
     type AutoFieldPath,
@@ -20,7 +23,7 @@ interface IValidationResultBuilder<TData> {
 
 class ValidationResultBuilder<TData> implements IValidationResultBuilder<TData> {
 
-    validationResult = new Map<string, ValidationResult>();
+    tree: AnyValidationResultTree = {};
 
     addFieldMessage<TPath extends string>(
         name: AutoFieldPath<TData, TPath>,
@@ -31,10 +34,10 @@ class ValidationResultBuilder<TData> implements IValidationResultBuilder<TData> 
             return this;
         }
 
-        let validationResult = this.validationResult.get(name);
+        const node = getValidationResultNode(this.tree, name, true)!;
+        let validationResult = node[VALIDATION_RESULT] as ValidationResult | undefined;
         if(validationResult == null) {
-            validationResult = new ValidationResult();
-            this.validationResult.set(name, validationResult);
+            validationResult = node[VALIDATION_RESULT] = new ValidationResult();
         }
 
         validationResult.add({ text: text, severity: severity });
@@ -54,9 +57,9 @@ export class MultiMessageDrivenValidator<TData> implements IValidator<TData> {
 
     mode: ValidatorMode;
 
-    validate(ctx: ValidatorContext<TData>): Map<string, IValidationResult> {
+    validate(ctx: ValidatorContext<TData>): ValidationResultTree<TData> {
         const builder = new ValidationResultBuilder<TData>();
         this.#validate(builder, ctx);
-        return builder.validationResult;
+        return builder.tree as ValidationResultTree<TData>;
     }
 }

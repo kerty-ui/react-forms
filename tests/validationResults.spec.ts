@@ -8,6 +8,7 @@ import {
     MultiMessageDrivenValidator,
     Severity
 } from "../src/lib";
+import { resultNames, resultOf } from "./validationResultTree.helpers";
 
 const texts = (result: { messages: readonly { text: string }[] } | undefined) =>
     result?.messages.map(m => m.text);
@@ -134,7 +135,7 @@ describe("SingleMessageResults", () => {
     it("should store the form message under the empty key when setFormMessage is called", () => {
         const results = new SingleMessageResults<any>().setFormMessage("Form failed");
 
-        expect(texts(results.get(""))).toEqual(["Form failed"]);
+        expect(texts(resultOf(results.tree, ""))).toEqual(["Form failed"]);
     });
 
     it("should become invalid when an error-severity form message is added", () => {
@@ -152,7 +153,7 @@ describe("SingleMessageResults", () => {
     it("should store the field message under the field key when setFieldMessage is called", () => {
         const results = new SingleMessageResults<any>().setFieldMessage("name", "Name is required");
 
-        expect(texts(results.get("name"))).toEqual(["Name is required"]);
+        expect(texts(resultOf(results.tree, "name"))).toEqual(["Name is required"]);
     });
 
     it("should keep only the last message when setFieldMessage is called twice for one field", () => {
@@ -160,7 +161,7 @@ describe("SingleMessageResults", () => {
             .setFieldMessage("name", "First")
             .setFieldMessage("name", "Second");
 
-        expect(texts(results.get("name"))).toEqual(["Second"]);
+        expect(texts(resultOf(results.tree, "name"))).toEqual(["Second"]);
     });
 
     it("should become invalid when an error-severity field message is added", () => {
@@ -180,7 +181,7 @@ describe("MultiMessageResults", () => {
     it("should store the message once when addFormMessage is called", () => {
         const results = new MultiMessageResults<any>().addFormMessage("Form failed");
 
-        expect(texts(results.get(""))).toEqual(["Form failed"]);
+        expect(texts(resultOf(results.tree, ""))).toEqual(["Form failed"]);
     });
 
     it("should keep every message when addFormMessage is called twice", () => {
@@ -188,7 +189,7 @@ describe("MultiMessageResults", () => {
             .addFormMessage("First")
             .addFormMessage("Second");
 
-        expect(texts(results.get(""))).toEqual(["First", "Second"]);
+        expect(texts(resultOf(results.tree, ""))).toEqual(["First", "Second"]);
     });
 
     it("should stay valid when only non-error form messages are added", () => {
@@ -200,7 +201,7 @@ describe("MultiMessageResults", () => {
     it("should carry the severity through when a non-error form message is added", () => {
         const results = new MultiMessageResults<any>().addFormMessage("Heads up", Severity.Warning);
 
-        expect(results.get("")?.has(Severity.Error)).toBe(false);
+        expect(resultOf(results.tree, "")?.has(Severity.Error)).toBe(false);
     });
 
     it("should become invalid when an error joins earlier non-error form messages", () => {
@@ -218,7 +219,7 @@ describe("MultiMessageResults", () => {
             .addFormMessage("Form second")
             .addFieldMessage("name", "Field second");
 
-        expect([texts(results.get("")), texts(results.get("name"))]).toEqual([
+        expect([texts(resultOf(results.tree, "")), texts(resultOf(results.tree, "name"))]).toEqual([
             ["Form first", "Form second"],
             ["Field first", "Field second"],
         ]);
@@ -241,7 +242,7 @@ describe("MultiMessageResults", () => {
             .addFieldMessage("name", "First")
             .addFieldMessage("name", "Second");
 
-        expect(texts(results.get("name"))).toEqual(["First", "Second"]);
+        expect(texts(resultOf(results.tree, "name"))).toEqual(["First", "Second"]);
     });
 
     it("should become invalid when an error-severity field message is added", () => {
@@ -296,7 +297,7 @@ describe("SingleMessageDrivenValidator", () => {
 
         const result = validator.validate({ data: {} });
 
-        expect(texts(result.get("name"))).toEqual(["Name is required"]);
+        expect(texts(resultOf(result, "name"))).toEqual(["Name is required"]);
     });
 
     it("should keep only the last message when the callback sets a field twice", () => {
@@ -307,7 +308,7 @@ describe("SingleMessageDrivenValidator", () => {
 
         const result = validator.validate({ data: {} });
 
-        expect(texts(result.get("name"))).toEqual(["Second"]);
+        expect(texts(resultOf(result, "name"))).toEqual(["Second"]);
     });
 
     it("should ignore the message when the callback passes an empty field name", () => {
@@ -317,7 +318,7 @@ describe("SingleMessageDrivenValidator", () => {
 
         const result = validator.validate({ data: {} });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 
     it("should return an empty map when the callback adds nothing", () => {
@@ -325,7 +326,7 @@ describe("SingleMessageDrivenValidator", () => {
 
         const result = validator.validate({ data: {} });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 });
 
@@ -343,7 +344,7 @@ describe("MultiMessageDrivenValidator", () => {
 
         const result = validator.validate({ data: {} });
 
-        expect(texts(result.get("name"))).toEqual(["First", "Second"]);
+        expect(texts(resultOf(result, "name"))).toEqual(["First", "Second"]);
     });
 
     it("should use the given severity when the callback provides one", () => {
@@ -353,7 +354,7 @@ describe("MultiMessageDrivenValidator", () => {
 
         const result = validator.validate({ data: {} });
 
-        expect(result.get("name")?.has(Severity.Error)).toBe(false);
+        expect(resultOf(result, "name")?.has(Severity.Error)).toBe(false);
     });
 
     it("should ignore the message when the callback passes an empty field name", () => {
@@ -363,7 +364,7 @@ describe("MultiMessageDrivenValidator", () => {
 
         const result = validator.validate({ data: {} });
 
-        expect(result.size).toBe(0);
+        expect(resultNames(result).length).toBe(0);
     });
 
     it("should build an independent result when validate is called twice", () => {
@@ -374,6 +375,6 @@ describe("MultiMessageDrivenValidator", () => {
         validator.validate({ data: {} });
         const second = validator.validate({ data: {} });
 
-        expect(texts(second.get("name"))).toEqual(["Required"]);
+        expect(texts(resultOf(second, "name"))).toEqual(["Required"]);
     });
 });

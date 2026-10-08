@@ -9,6 +9,7 @@ import {
     type IKertyForm,
     type IValidationResult,
 } from "../src/lib";
+import { treeOf } from "./validationResultTree.helpers";
 
 type Item = {
     id?: number;
@@ -23,17 +24,17 @@ type ItemsForm = {
 const itemsValidator = {
     mode: "fieldDriven" as const,
     validate: ({ data }: { data: ItemsForm }) => {
-        const results = new Map<string, IValidationResult>();
+        const results: [string, IValidationResult][] = [];
 
         (data.items ?? []).forEach((item, index) => {
             const result = new ValidationResult();
             if (item.code == null) {
                 result.set({ text: "Code is required", severity: Severity.Error });
             }
-            results.set(`items[${index}].code`, result);
+            results.push([`items[${index}].code`, result]);
         });
 
-        return results;
+        return treeOf(results);
     },
 };
 

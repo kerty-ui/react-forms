@@ -6,8 +6,12 @@ import { removeObjectValue } from "./utils/removeObjectValue";
 import { removeObjectValueImmutable } from "./utils/removeObjectValueImmutable";
 import { isEqual } from "./utils/isEqual";
 import { ValidationResult } from "./validation/validationResult";
+import { setValidationResult } from "./validation/validationResultTree";
 import {
     Severity,
+    VALIDATION_RESULT,
+    type AnyValidationResultTree,
+    type ValidationResultTree,
     type AutoFieldPath,
     type AutoArrayFieldPath,
     type FieldPathValue,
@@ -149,7 +153,6 @@ class FieldEntry {
     lastPartName: string;
     state: FieldState = defaultFieldState;
     validationResult?: IValidationResult | undefined = undefined;
-    validationRun: number = 0;
 
     constructor(path: FieldPathPart[]) {
         this.lastPartName = path[path.length - 1].name;
@@ -279,7 +282,6 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #dirtyCount = 0;
     #invalidCount = 0;
     #validatedCount = 0;
-    #validationRun = 0;
     #listeners = new Set<FormListener>();
 
     constructor(options: FormOptions<TData>) {
@@ -700,27 +702,18 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
         if (this.#validator != null) {
 
-            const validationResults = this.#validator.validate({
+            const tree = this.#validator.validate({
                 data: this.#data,
                 ruleSet: this.#ruleSet,
-            });
+            }) as AnyValidationResultTree;
 
-            for (let [fieldName, validationResult] of validationResults) {
+            const formValidationResult = tree[VALIDATION_RESULT];
+            if(formValidationResult !== undefined && formValidationResult.messages.length > 0) {
+                this.#validationResult = formValidationResult;
+                listenerOptions.formValidationChanged();
+            }
 
-                if(fieldName == null || fieldName === "") {
-                    if(validationResult.messages.length === 0) {
-                        continue;
-                    }
-
-                    this.#validationResult = validationResult;
-                    listenerOptions.formValidationChanged();
-
-                    continue;
-                }
-
-                const field = this.#getField(fieldName);
-                const entry = this.#getFieldEntry(field);
-
+            this.#forEachTreeResult(tree, this.#fieldEntries, "", true, (entry, validationResult, fieldName) => {
                 if(validationResult.messages.length > 0) {
                     entry.validationResult = validationResult;
                     listenerOptions.formValidationChanged();
@@ -737,7 +730,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                     isValidated: true,
                 });
                 listenerOptions.addAffectedField(fieldName);
-            }
+            });
         }
 
         const formIsValid = this.#isFormValid()
@@ -762,18 +755,20 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     }
 
     applyValidationResult(result: IValidationResult, options?: ApplyValidationOptions): void {
-        this.applyValidationResults(new Map<string, IValidationResult>([["", result]]), options);
+        this.applyValidationResults({ [VALIDATION_RESULT]: result } as ValidationResultTree<TData>, options);
     }
 
     applyFieldValidationResult<TPath extends string>(name: AutoFieldPath<TData, TPath>, result: IValidationResult, options?: ApplyValidationOptions) {
-        this.applyValidationResults(new Map<string, IValidationResult>([[name, result]]), options);
+        this.applyValidationResults(setValidationResult({} as ValidationResultTree<TData>, name, result), options);
     }
 
-    applyValidationResults(validationResults: Map<string, IValidationResult>, options?: ApplyValidationOptions) {
+    applyValidationResults(validationResults: ValidationResultTree<TData>, options?: ApplyValidationOptions) {
 
         if(validationResults == null) {
             return;
         }
+
+        const tree = validationResults as AnyValidationResultTree;
 
         this.#lastValidation = undefined;
 
@@ -790,48 +785,40 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
             this.#clearEntriesValidation(listenerOptions, true);
         }
-        else if(validationResults.size === 0) {
+        else if(tree[VALIDATION_RESULT] === undefined && Object.keys(tree).length === 0) {
             return;
         }
 
-        for(let [fieldName, validationResult] of validationResults) {
+        const treeFormValidationResult = tree[VALIDATION_RESULT];
+        if(treeFormValidationResult !== undefined
+            && (mode !== "merge" || treeFormValidationResult.messages.length > 0)) {
+            const formValidationResult = new ValidationResult();
+            if(mode === "merge") {
+                formValidationResult.merge(this.#validationResult);
+            }
+            formValidationResult.merge(treeFormValidationResult);
+
+            if(formValidationResult.messages.length > 0) {
+                this.#validationResult = formValidationResult;
+                listenerOptions.formValidationChanged();
+            }
+            else if(this.#validationResult != null) {
+                this.#validationResult = undefined;
+                listenerOptions.formValidationChanged();
+            }
+        }
+
+        this.#forEachTreeResult(tree, this.#fieldEntries, "", !ignoreUnknownFields, (entry, validationResult, fieldName) => {
 
             const validationResultIsEmpty = validationResult.messages.length === 0;
 
-            if(fieldName == null || fieldName === "") {
-                const formValidationResult = new ValidationResult();
-                if(mode === "merge") {
-                    if(validationResultIsEmpty) {
-                        continue;
-                    }
-                    formValidationResult.merge(this.#validationResult);
-                }
-                formValidationResult.merge(validationResult);
-
-                if(formValidationResult.messages.length > 0) {
-                    this.#validationResult = formValidationResult;
-                    listenerOptions.formValidationChanged();
-                }
-                else if(this.#validationResult != null) {
-                    this.#validationResult = undefined;
-                    listenerOptions.formValidationChanged();
-                }
-                continue;
-            }
-
             if(validationResultIsEmpty && mode === "merge") {
-                continue;
-            }
-
-            const entry = this.#getFieldEntry(this.#getField(fieldName), !ignoreUnknownFields);
-
-            if(entry == null) {
-                continue;
+                return;
             }
 
             if(validationResultIsEmpty) {
                 if(entry.validationResult == null && entry.state.isValid) {
-                    continue;
+                    return;
                 }
 
                 entry.validationResult = undefined;
@@ -859,7 +846,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 listenerOptions.formValidationChanged();
                 listenerOptions.addAffectedField(fieldName);
             }
-        }
+        });
 
         const formIsValid = this.#isFormValid();
         if(this.#state.isValid !== formIsValid || !this.#state.isValidated) {
@@ -1369,17 +1356,69 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
     }
 
-    #clearValidationResultsOutsideRun(node: Record<string, unknown>, name: string, listenerOptions: NotifyListenerOptions) {
+    #forEachTreeResult(
+        tree: AnyValidationResultTree,
+        entriesNode: any,
+        name: string,
+        initialize: boolean,
+        callback: (entry: FieldEntry, validationResult: IValidationResult, fieldName: string) => void) {
+        if(Array.isArray(tree)) {
+            for(let i = 0; i < tree.length; i++) {
+                const child: AnyValidationResultTree | undefined = tree[i];
+                if(child == null) {
+                    continue;
+                }
+
+                const childName = `${name}[${i}]`;
+                const validationResult = child[VALIDATION_RESULT];
+                if(validationResult !== undefined) {
+                    const entry: FieldEntry | undefined = entriesNode?.[i]?.[INTERNAL_NAME_PREFIX]
+                        ?? (initialize ? this.#getFieldEntry(this.#getField(childName)) : undefined);
+                    if(entry !== undefined) {
+                        callback(entry, validationResult, childName);
+                    }
+                }
+
+                this.#forEachTreeResult(child, entriesNode?.[i], childName, initialize, callback);
+            }
+            return;
+        }
+
+        for(const key in tree) {
+            const child: AnyValidationResultTree | undefined = tree[key];
+            if(child == null) {
+                continue;
+            }
+
+            const childName = name === "" ? key : `${name}.${key}`;
+            const validationResult = child[VALIDATION_RESULT];
+            if(validationResult !== undefined) {
+                const entry: FieldEntry | undefined = entriesNode?.[INTERNAL_NAME_PREFIX + key]
+                    ?? (initialize ? this.#getFieldEntry(this.#getField(childName)) : undefined);
+                if(entry !== undefined) {
+                    callback(entry, validationResult, childName);
+                }
+            }
+
+            this.#forEachTreeResult(child, entriesNode?.[key], childName, initialize, callback);
+        }
+    }
+
+    #clearValidationResultsOutsideTree(
+        node: Record<string, unknown>,
+        tree: AnyValidationResultTree | undefined,
+        name: string,
+        listenerOptions: NotifyListenerOptions) {
         if(Array.isArray(node)) {
             const itemEntry = (node as ItemNode)[INTERNAL_NAME_PREFIX];
-            if(itemEntry !== undefined && this.#hasValidationResultOutsideRun(itemEntry)) {
+            if(itemEntry !== undefined && tree?.[VALIDATION_RESULT] === undefined && this.#hasValidationResult(itemEntry)) {
                 this.#clearFieldValidationResult(itemEntry, name, listenerOptions);
             }
 
             for(let i = 0; i < node.length; i++) {
                 const itemNode = node[i];
                 if(itemNode != null) {
-                    this.#clearValidationResultsOutsideRun(itemNode as Record<string, unknown>, `${name}[${i}]`, listenerOptions);
+                    this.#clearValidationResultsOutsideTree(itemNode as Record<string, unknown>, tree?.[i], `${name}[${i}]`, listenerOptions);
                 }
             }
             return;
@@ -1389,23 +1428,27 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             const value = node[key];
 
             if(value instanceof FieldEntry) {
-                if(!this.#hasValidationResultOutsideRun(value)) {
+                const isItemEntry = key === INTERNAL_NAME_PREFIX;
+                const validationResult = isItemEntry
+                    ? tree?.[VALIDATION_RESULT]
+                    : tree?.[value.lastPartName]?.[VALIDATION_RESULT];
+                if(validationResult !== undefined || !this.#hasValidationResult(value)) {
                     continue;
                 }
 
                 this.#clearFieldValidationResult(
                     value,
-                    key === INTERNAL_NAME_PREFIX ? name : name === "" ? value.lastPartName : `${name}.${value.lastPartName}`,
+                    isItemEntry ? name : name === "" ? value.lastPartName : `${name}.${value.lastPartName}`,
                     listenerOptions);
             }
             else if(value != null) {
-                this.#clearValidationResultsOutsideRun(value as Record<string, unknown>, name === "" ? key : `${name}.${key}`, listenerOptions);
+                this.#clearValidationResultsOutsideTree(value as Record<string, unknown>, tree?.[key], name === "" ? key : `${name}.${key}`, listenerOptions);
             }
         }
     }
 
-    #hasValidationResultOutsideRun(entry: FieldEntry) {
-        return entry.validationRun !== this.#validationRun && (entry.validationResult != null || !entry.state.isValid);
+    #hasValidationResult(entry: FieldEntry) {
+        return entry.validationResult != null || !entry.state.isValid;
     }
 
     #clearFieldValidationResult(entry: FieldEntry, name: string, listenerOptions: NotifyListenerOptions) {
@@ -1454,29 +1497,19 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         return true;
     }
 
-    #validateField(name: string, listenerOptions: NotifyListenerOptions) {
+    #validateField(name: string, listenerOptions: NotifyListenerOptions): AnyValidationResultTree | undefined {
 
         if(this.#validator == null) {
-            return;
+            return undefined;
         }
 
-        const validationResults = this.#validator.validate({
+        const tree = this.#validator.validate({
             fieldName: name,
             data: this.#data,
             ruleSet: this.#ruleSet,
-        });
+        }) as AnyValidationResultTree;
 
-        const validationRun = ++this.#validationRun;
-
-        for (let [fieldName, validationResult] of validationResults) {
-            if(fieldName == null || fieldName === "") {
-                continue;
-            }
-
-            const field = this.#getField(fieldName);
-            const entry = this.#getFieldEntry(field);
-            entry.validationRun = validationRun;
-
+        this.#forEachTreeResult(tree, this.#fieldEntries, "", true, (entry, validationResult, fieldName) => {
             const messages = validationResult.messages;
             const currentMessages = entry.validationResult?.messages;
             let validationHasNotChanged = entry.state.isValidated && (currentMessages === undefined
@@ -1490,7 +1523,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
             }
 
             if(validationHasNotChanged) {
-                continue;
+                return;
             }
 
             const hasMessages = messages.length > 0;
@@ -1504,7 +1537,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
 
             listenerOptions.formValidationChanged();
             listenerOptions.addAffectedField(fieldName);
-        }
+        });
+
+        return tree;
     }
 
     #onFieldValueChange(field: FieldInfo, value: unknown, previousData: TData, movedItems: MovedItems | undefined, silent: boolean) {
@@ -1621,8 +1656,8 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         if(this.#validator != null) {
             if(entry.state.isValidated || this.#state.isValidated) {
                 if (this.#isMessageDrivenValidator) {
-                    this.#validateField(field.name, listenerOptions);
-                    this.#clearValidationResultsOutsideRun(this.#fieldEntries as Record<string, unknown>, "", listenerOptions);
+                    const tree = this.#validateField(field.name, listenerOptions);
+                    this.#clearValidationResultsOutsideTree(this.#fieldEntries as Record<string, unknown>, tree, "", listenerOptions);
                 } else {
                     if(entry.validationResult != null || !entry.state.isValid) {
                         entry.validationResult = undefined;

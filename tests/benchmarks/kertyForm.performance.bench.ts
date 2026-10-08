@@ -5,6 +5,8 @@ import {
     Validator,
     ValidationResult,
     Severity,
+    setValidationResult,
+    type AnyValidationResultTree,
     type IValidationResult,
     type IValidator
 } from "../../src/lib";
@@ -462,18 +464,26 @@ const createGridValidator = () => new Validator<any>({
     rows: [Object.fromEntries(Array.from({ length: CELLS_PER_ROW }, (_, cell) => [`_cell${cell}`, requiredCell]))],
 });
 
-const cellResults = (rows: number, result: IValidationResult) => {
-    const results = new Map<string, IValidationResult>();
-    for(let row = 0; row < rows; row++) {
-        for(let cell = 0; cell < CELLS_PER_ROW; cell++) {
-            results.set(`rows[${row}].cell${cell}`, result);
-        }
+const resultsOf = (results: [string, IValidationResult][] = []) => {
+    const tree: AnyValidationResultTree = {};
+    for(const [name, result] of results) {
+        setValidationResult(tree, name as any, result);
     }
-    return results;
+    return tree;
 };
 
-// Returns a prebuilt map, so validate() measures only the form's bookkeeping.
-const precomputedValidator = (results: Map<string, IValidationResult>): IValidator<Grid> => ({
+const cellResults = (rows: number, result: IValidationResult) => {
+    const results: [string, IValidationResult][] = [];
+    for(let row = 0; row < rows; row++) {
+        for(let cell = 0; cell < CELLS_PER_ROW; cell++) {
+            results.push([`rows[${row}].cell${cell}`, result]);
+        }
+    }
+    return resultsOf(results);
+};
+
+// Returns a prebuilt tree, so validate() measures only the form's bookkeeping.
+const precomputedValidator = (results: AnyValidationResultTree): IValidator<Grid> => ({
     mode: "fieldDriven",
     validate: () => results,
 });
@@ -511,7 +521,7 @@ describe("validate – variants at 1000 rows (subscribed)", () => {
     const valid = createForm(1_000, "subscribed", "value", createGridValidator());
     const invalid = createForm(1_000, "subscribed", "", createGridValidator());
     const precomputed = createForm(1_000, "subscribed", "", precomputedValidator(cellResults(1_000, ERROR)));
-    const formLevel = createForm(1_000, "subscribed", "value", precomputedValidator(new Map([["", ERROR]])));
+    const formLevel = createForm(1_000, "subscribed", "value", precomputedValidator(resultsOf([["", ERROR]])));
 
     bench("no validator", () => {
         noValidator.validate();
@@ -553,7 +563,7 @@ for(const mode of ["bare", "subscribed"] as const) {
     describe(`applyValidationResults – single cell, patch, by form size (${mode})`, () => {
         for(const rows of SIZES) {
             const form = createForm(rows, mode);
-            const results = new Map([[`rows[${Math.floor(rows / 2)}].cell3`, ERROR]]);
+            const results = resultsOf([[`rows[${Math.floor(rows / 2)}].cell3`, ERROR]]);
 
             bench(`${rows} rows${mode === "subscribed" ? ` / ${listenerCount(rows)} listeners` : ""}`, () => {
                 form.applyValidationResults(results);
@@ -587,10 +597,10 @@ describe("applyValidationResults – variants at 1000 rows (subscribed)", () => 
     const replaceEmptyForm = createForm(1_000, "subscribed");
     const unknownForm = createForm(1_000, "bare");
 
-    const formLevel = new Map([["", ERROR]]);
-    const single = new Map([["rows[500].cell3", ERROR]]);
+    const formLevel = resultsOf([["", ERROR]]);
+    const single = resultsOf([["rows[500].cell3", ERROR]]);
     const everyCell = cellResults(1_000, ERROR);
-    const empty = new Map<string, IValidationResult>();
+    const empty = resultsOf();
     const ignoreOptions = { unknownFieldBehavior: "ignore" } as const;
     const replaceOptions = { mode: "replace" } as const;
 
@@ -637,7 +647,7 @@ describe("getInvalidFields – variants at 1000 rows (subscribed)", () => {
     const singleForm = createForm(1_000, "subscribed");
     const everyCellForm = createForm(1_000, "subscribed");
 
-    singleForm.applyValidationResults(new Map([["rows[500].cell3", ERROR]]));
+    singleForm.applyValidationResults(resultsOf([["rows[500].cell3", ERROR]]));
     everyCellForm.applyValidationResults(cellResults(1_000, ERROR));
 
     bench("no invalid field (skips the walk)", () => {

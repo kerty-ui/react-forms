@@ -11,6 +11,7 @@ import {
     type FieldPath,
     type IKertyForm
 } from "../src/lib";
+import { treeOf } from "./validationResultTree.helpers";
 
 type LoginForm = {
     username: string;
@@ -46,7 +47,7 @@ const warning = (text: string) => new ValidationResult().add({ text, severity: S
 /** A validator that always reports the given form-level result. */
 const formLevelValidator = (result: ValidationResult) => ({
     mode: "fieldDriven" as const,
-    validate: () => new Map([["", result]]),
+    validate: () => treeOf([["", result]]),
 });
 
 // ─── validate ────────────────────────────────────────────────────────────────
@@ -183,7 +184,7 @@ const countingValidator = () => {
         fullRuns: 0,
         validate: ({ fieldName }: { fieldName?: string | null }) => {
             if (fieldName == null) validator.fullRuns++;
-            return new Map<string, ValidationResult>();
+            return treeOf();
         },
     };
     return validator;
@@ -1552,7 +1553,7 @@ describe("KertyForm.applyValidationResults", () => {
     it("should apply each field result when a map is given", () => {
         const form = mountedForm();
 
-        form.applyValidationResults(new Map([["username", error("Taken")]]));
+        form.applyValidationResults(treeOf([["username", error("Taken")]]));
 
         expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
@@ -1560,16 +1561,16 @@ describe("KertyForm.applyValidationResults", () => {
     it("should apply the form result when the map contains the empty key", () => {
         const form = mountedForm();
 
-        form.applyValidationResults(new Map([["", error("Login failed")]]));
+        form.applyValidationResults(treeOf([["", error("Login failed")]]));
 
         expect(form.getValidationMessage()?.text).toBe("Login failed");
     });
 
     it("should clear previous field results when applied in replace mode", () => {
         const form = mountedForm();
-        form.applyValidationResults(new Map([["username", error("Taken")]]), { mode: "replace" });
+        form.applyValidationResults(treeOf([["username", error("Taken")]]), { mode: "replace" });
 
-        form.applyValidationResults(new Map([["password", error("Too short")]]), { mode: "replace" });
+        form.applyValidationResults(treeOf([["password", error("Too short")]]), { mode: "replace" });
 
         expect(form.getValidationMessage("username")).toBeUndefined();
     });
@@ -1577,7 +1578,7 @@ describe("KertyForm.applyValidationResults", () => {
     it("should mark a registered field without results validated and valid when applied in replace mode", () => {
         const form = mountedForm();
 
-        form.applyValidationResults(new Map([["username", error("Taken")]]), { mode: "replace" });
+        form.applyValidationResults(treeOf([["username", error("Taken")]]), { mode: "replace" });
 
         expect(form.getFieldState("password")).toMatchObject({ isValid: true, isValidated: true });
     });
@@ -1585,7 +1586,7 @@ describe("KertyForm.applyValidationResults", () => {
     it("should mark every registered field validated when an empty map is applied in replace mode", () => {
         const form = mountedForm();
 
-        form.applyValidationResults(new Map(), { mode: "replace" });
+        form.applyValidationResults(treeOf(), { mode: "replace" });
 
         expect([form.getFieldState("username").isValidated, form.getFieldState("password").isValidated]).toEqual([true, true]);
     });
@@ -1595,43 +1596,43 @@ describe("KertyForm.applyValidationResults", () => {
         let calls = 0;
         form.addFieldListener("password", () => { calls++; });
 
-        form.applyValidationResults(new Map([["username", error("Taken")]]), { mode: "replace" });
+        form.applyValidationResults(treeOf([["username", error("Taken")]]), { mode: "replace" });
 
         expect(calls).toBe(1);
     });
 
     it("should keep previous field results when applied in merge mode", () => {
         const form = mountedForm();
-        form.applyValidationResults(new Map([["username", error("Taken")]]));
+        form.applyValidationResults(treeOf([["username", error("Taken")]]));
 
-        form.applyValidationResults(new Map([["password", error("Too short")]]), { mode: "merge" });
+        form.applyValidationResults(treeOf([["password", error("Too short")]]), { mode: "merge" });
 
         expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
     it("should keep a field result when the map holds an empty result for it in merge mode", () => {
         const form = mountedForm();
-        form.applyValidationResults(new Map([["username", error("Taken")]]));
+        form.applyValidationResults(treeOf([["username", error("Taken")]]));
 
-        form.applyValidationResults(new Map([["username", new ValidationResult()]]), { mode: "merge" });
+        form.applyValidationResults(treeOf([["username", new ValidationResult()]]), { mode: "merge" });
 
         expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
 
     it("should keep the form invalid when an empty result is merged for the only invalid field", () => {
         const form = mountedForm();
-        form.applyValidationResults(new Map([["username", error("Taken")]]));
+        form.applyValidationResults(treeOf([["username", error("Taken")]]));
 
-        form.applyValidationResults(new Map([["username", new ValidationResult()]]), { mode: "merge" });
+        form.applyValidationResults(treeOf([["username", new ValidationResult()]]), { mode: "merge" });
 
         expect(form.getState().isValid).toBe(false);
     });
 
     it("should leave the form untouched when an empty map is applied in merge mode", () => {
         const form = mountedForm();
-        form.applyValidationResults(new Map([["username", error("Taken")]]));
+        form.applyValidationResults(treeOf([["username", error("Taken")]]));
 
-        form.applyValidationResults(new Map(), { mode: "merge" });
+        form.applyValidationResults(treeOf(), { mode: "merge" });
 
         expect(form.getValidationMessage("username")?.text).toBe("Taken");
     });
@@ -1640,7 +1641,7 @@ describe("KertyForm.applyValidationResults", () => {
         const form = mountedForm();
         form.applyValidationResult(error("Login failed"));
 
-        form.applyValidationResults(new Map([["username", error("Taken")]]), { mode: "replace" });
+        form.applyValidationResults(treeOf([["username", error("Taken")]]), { mode: "replace" });
 
         expect(form.getValidationResult()).toBeUndefined();
     });
@@ -1648,16 +1649,16 @@ describe("KertyForm.applyValidationResults", () => {
     it("should keep the field valid when only a warning is applied to it", () => {
         const form = mountedForm();
 
-        form.applyValidationResults(new Map([["username", warning("Weak")]]));
+        form.applyValidationResults(treeOf([["username", warning("Weak")]]));
 
         expect(form.getFieldState("username")).toMatchObject({ isValid: true, isValidated: true });
     });
 
     it("should make the form valid again when a field error is patched with a warning", () => {
         const form = mountedForm();
-        form.applyValidationResults(new Map([["username", error("Taken")]]));
+        form.applyValidationResults(treeOf([["username", error("Taken")]]));
 
-        form.applyValidationResults(new Map([["username", warning("Weak")]]));
+        form.applyValidationResults(treeOf([["username", warning("Weak")]]));
 
         expect(form.getState().isValid).toBe(true);
     });
@@ -1838,7 +1839,7 @@ describe("KertyForm.reset – validation", () => {
             mode: "fieldDriven",
             validate: ({ ruleSet }: { ruleSet?: string | null }) => {
                 ruleSets.push(ruleSet);
-                return new Map();
+                return treeOf();
             },
         });
         form.validate("login");
@@ -1896,7 +1897,7 @@ const clearingOperations = [
     { operation: "resetValidationResults()", clear: (form: KertyForm<OrderForm>) => form.resetValidationResults() },
     {
         operation: "applyValidationResults() in replace mode",
-        clear: (form: KertyForm<OrderForm>) => form.applyValidationResults(new Map(), { mode: "replace" }),
+        clear: (form: KertyForm<OrderForm>) => form.applyValidationResults(treeOf(), { mode: "replace" }),
     },
 ];
 
@@ -2177,7 +2178,7 @@ describe("KertyForm.getInvalidFields", () => {
 
     it("should return array item fields in index order when they were invalidated out of order", () => {
         const form = new KertyForm<any>({ data: { rows: [{ a: 1 }, { a: 2 }, { a: 3 }] } });
-        form.applyValidationResults(new Map([["rows[2].a", error("x")], ["rows[0].a", error("x")], ["rows[1].a", error("x")]]));
+        form.applyValidationResults(treeOf([["rows[2].a", error("x")], ["rows[0].a", error("x")], ["rows[1].a", error("x")]]));
 
         expect(form.getInvalidFields()).toEqual(["rows[0].a", "rows[1].a", "rows[2].a"]);
     });

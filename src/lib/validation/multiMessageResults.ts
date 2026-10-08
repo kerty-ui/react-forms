@@ -1,7 +1,10 @@
 ﻿import { ValidationResult } from "./validationResult";
-import { Severity, type AutoFieldPath, type IValidationResult, type MessageSeverity } from "../types";
+import { getValidationResultNode } from "./validationResultTree";
+import { Severity, VALIDATION_RESULT, type AnyValidationResultTree, type AutoFieldPath, type MessageSeverity, type ValidationResultTree } from "../types";
 
-export class MultiMessageResults<TData> extends Map<string, IValidationResult> {
+export class MultiMessageResults<TData> {
+
+    readonly tree: ValidationResultTree<TData> = {} as ValidationResultTree<TData>;
 
     isValid: boolean = true;
 
@@ -16,15 +19,15 @@ export class MultiMessageResults<TData> extends Map<string, IValidationResult> {
         return this.#addMessage(name, text, severity);
     }
 
-    #addMessage(key: string, text: string, severity: MessageSeverity) {
+    #addMessage(name: string, text: string, severity: MessageSeverity) {
         if(severity === Severity.Error) {
             this.isValid = false;
         }
 
-        let validationResult = this.get(key) as ValidationResult;
+        const node = getValidationResultNode(this.tree as AnyValidationResultTree, name, true)!;
+        let validationResult = node[VALIDATION_RESULT] as ValidationResult | undefined;
         if(validationResult == null) {
-            validationResult = new ValidationResult();
-            this.set(key, validationResult);
+            validationResult = node[VALIDATION_RESULT] = new ValidationResult();
         }
 
         validationResult.add({ text: text, severity: severity });

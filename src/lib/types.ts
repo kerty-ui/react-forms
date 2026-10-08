@@ -45,6 +45,37 @@ export interface IValidationResult {
 }
 
 /**
+ * The key under which a {@link ValidationResultTree} node holds the result of its own field;
+ * at the root it holds the result of the form.
+ */
+export const VALIDATION_RESULT: unique symbol = Symbol("validationResult");
+
+/**
+ * A {@link ValidationResultTree} whose data type is unknown.
+ */
+export type AnyValidationResultTree = {
+    [VALIDATION_RESULT]?: IValidationResult;
+    [key: string]: any;
+};
+
+type ValidationResultTreeChildren<T> =
+    T extends LeafObject
+        ? unknown
+        : T extends readonly (infer Item)[]
+            ? (ValidationResultTree<Item> | undefined)[]
+            : T extends object
+                ? { [K in keyof T & string]?: ValidationResultTree<T[K]> }
+                : unknown;
+
+/**
+ * Validation results shaped like the form data. Each node holds the result of its field under
+ * {@link VALIDATION_RESULT} and the nodes of the field's properties or array items under their keys.
+ */
+export type ValidationResultTree<T> = unknown extends T
+    ? AnyValidationResultTree
+    : { [VALIDATION_RESULT]?: IValidationResult } & ValidationResultTreeChildren<NonNullable<T>>;
+
+/**
  * How the form applies the results a validator returns.
  */
 export type ValidatorMode =
@@ -105,9 +136,9 @@ export interface IValidator<TData> {
     /**
      * Validates the form data.
      * @param ctx The data, the changed field and the rule set.
-     * @returns The results keyed by field path; the empty key refers to the form itself.
+     * @returns The results shaped like the form data; the root holds the result of the form.
      */
-    validate: (ctx: ValidatorContext<TData>) => Map<string, IValidationResult>;
+    validate: (ctx: ValidatorContext<TData>) => ValidationResultTree<TData>;
 }
 
 /**
@@ -581,10 +612,10 @@ interface IFormValidation<TData> {
 
     /**
      * Applies validation results to the form and its fields.
-     * @param validationResults The results keyed by field path; the empty key refers to the form itself.
+     * @param validationResults The results shaped like the form data; the root holds the result of the form.
      * @param options How the results are combined with existing results.
      */
-    applyValidationResults(validationResults: Map<string, IValidationResult>, options?: ApplyValidationOptions): void;
+    applyValidationResults(validationResults: ValidationResultTree<TData>, options?: ApplyValidationOptions): void;
 
     /**
      * Clears the validation results of the form and all fields.
