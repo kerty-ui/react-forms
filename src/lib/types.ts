@@ -482,6 +482,10 @@ export type FormConfig = {
      * Whether changing a value validates the field and the form; `true` by default.
      */
     validateOnValueChange?: boolean;
+    /**
+     * Whether to delete a field's value when its last listener is removed; `false` by default.
+     */
+    deleteValueOnUnsubscribe?: boolean;
 }
 
 /**

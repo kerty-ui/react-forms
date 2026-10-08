@@ -91,6 +91,7 @@ describe("KertyForm – configuration", () => {
             keepValidationResultsWithoutListeners: true,
             cacheValidationResult: true,
             validateOnValueChange: true,
+            deleteValueOnUnsubscribe: false,
         });
     });
 
@@ -1046,6 +1047,90 @@ describe("KertyForm – field state without listeners", () => {
         const state = form.getFieldState("a");
 
         expect(state.isDirty).toBe(true);
+    });
+});
+
+describe("KertyForm – deleting values on unsubscribe", () => {
+    it("should keep the field value when the last listener unsubscribes by default", async () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+        const unsubscribe = register(form, "username");
+
+        unsubscribe();
+        await Promise.resolve();
+
+        expect(form.getData()).toEqual({ username: "bob", password: "pw" });
+    });
+
+    it("should delete the field value when the last listener unsubscribes and deleting is enabled", async () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" }, deleteValueOnUnsubscribe: true });
+        const unsubscribe = register(form, "username");
+
+        unsubscribe();
+        await Promise.resolve();
+
+        expect(form.getData()).toEqual({ password: "pw" });
+    });
+
+    it("should delete the field value only after a microtask when the last listener unsubscribes", () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" }, deleteValueOnUnsubscribe: true });
+        const unsubscribe = register(form, "username");
+
+        unsubscribe();
+
+        expect(form.getData()).toEqual({ username: "bob", password: "pw" });
+    });
+
+    it("should keep the field value when another listener remains", async () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" }, deleteValueOnUnsubscribe: true });
+        register(form, "username");
+        const unsubscribe = register(form, "username");
+
+        unsubscribe();
+        await Promise.resolve();
+
+        expect(form.getData()).toEqual({ username: "bob", password: "pw" });
+    });
+
+    it("should keep the field value when the field is subscribed again before the last unsubscribe is released", async () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" }, deleteValueOnUnsubscribe: true });
+        const unsubscribe = register(form, "username");
+
+        unsubscribe();
+        register(form, "username");
+        await Promise.resolve();
+
+        expect(form.getData()).toEqual({ username: "bob", password: "pw" });
+    });
+
+    it("should delete a nested value without touching its siblings when its last listener unsubscribes", async () => {
+        const form = new KertyForm<any>({ data: { person: { name: "John", age: 30 } }, deleteValueOnUnsubscribe: true });
+        const unsubscribe = register(form, "person.age");
+
+        unsubscribe();
+        await Promise.resolve();
+
+        expect(form.getData()).toEqual({ person: { name: "John" } });
+    });
+
+    it("should remove the array item when the last listener of the item unsubscribes", async () => {
+        const form = new KertyForm<any>({ data: { items: ["a", "b", "c"] }, deleteValueOnUnsubscribe: true });
+        const unsubscribe = register(form, "items[1]");
+
+        unsubscribe();
+        await Promise.resolve();
+
+        expect(form.getData().items).toEqual(["a", "c"]);
+    });
+
+    it("should delete the field value when deleting is enabled at runtime", async () => {
+        const form = new KertyForm<LoginForm>({ data: { username: "bob", password: "pw" } });
+        const unsubscribe = register(form, "username");
+        form.updateConfiguration({ deleteValueOnUnsubscribe: true });
+
+        unsubscribe();
+        await Promise.resolve();
+
+        expect(form.getData()).toEqual({ password: "pw" });
     });
 });
 

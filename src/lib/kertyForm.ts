@@ -125,6 +125,7 @@ export const defaultFormConfig = {
     keepValidationResultsWithoutListeners: true,
     cacheValidationResult: true,
     validateOnValueChange: true,
+    deleteValueOnUnsubscribe: false,
 } as Required<FormConfig>
 
 class FieldInfo implements IFieldInfo {
@@ -265,6 +266,7 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
     #keepValidationResultsWithoutListeners: boolean = true;
     #cacheValidationResult: boolean = true;
     #validateOnValueChange: boolean = true;
+    #deleteValueOnUnsubscribe: boolean = false;
 
     #initialData: TData;
     #data: TData;
@@ -320,6 +322,9 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
         }
         if(config.validateOnValueChange != null) {
             this.#validateOnValueChange = config.validateOnValueChange;
+        }
+        if(config.deleteValueOnUnsubscribe != null) {
+            this.#deleteValueOnUnsubscribe = config.deleteValueOnUnsubscribe;
         }
 
         if(this.#dirtyCheckEnabled === dirtyCheckEnabled && this.#dirtyCheckNullAsDefault === dirtyCheckNullAsDefault) {
@@ -431,6 +436,10 @@ export class KertyForm<TData extends ObjectData> implements IKertyForm<TData> {
                 const fieldEntry = this.#getFieldEntry(field, false);
                 if(fieldEntry !== subscribedEntry) {
                     return;
+                }
+
+                if(this.#deleteValueOnUnsubscribe) {
+                    this.removeFieldValue(name);
                 }
 
                 if(this.#keepValidationResultsWithoutListeners) {
